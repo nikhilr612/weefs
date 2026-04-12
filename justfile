@@ -14,5 +14,7 @@ build: deps
 	jar cvfm bin/artifact.jar MANIFEST.MF -C bin .
 run:
 	java -jar bin/artifact.jar integration
+run-gui:
+	java -jar bin/artifact.jar gui
 clean:
 	rm -rf bin
