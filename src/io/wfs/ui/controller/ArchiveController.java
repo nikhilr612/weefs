@@ -10,11 +10,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Main application controller. Coordinates between the model and views.
- * Handles high-level user actions: open, create, close, save archives.
+ * Default Swing implementation of {@link IArchiveController}.
+ * Coordinates between the model and views, handling high-level user
+ * actions: open, create, close, save archives.
  * Delegates individual file operations to {@link FileOperations}.
  */
-public final class ArchiveController {
+public final class ArchiveController implements IArchiveController {
 
     private final ArchiveModel model;
     private final FileOperations fileOps;
@@ -25,20 +26,24 @@ public final class ArchiveController {
         this.fileOps = new FileOperations(model);
     }
 
+    @Override
     public void setParentComponent(Component parent) {
         this.parentComponent = parent;
     }
 
+    @Override
     public ArchiveModel getModel() {
         return model;
     }
 
+    @Override
     public FileOperations getFileOps() {
         return fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
 
+    @Override
     public void openArchive() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Open Archive");
@@ -72,6 +77,7 @@ public final class ArchiveController {
         });
     }
 
+    @Override
     public void createArchive() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Create New Archive");
@@ -93,6 +99,7 @@ public final class ArchiveController {
         });
     }
 
+    @Override
     public void closeArchive() {
         executeInBackground("Closing archive...", () -> {
             try {
@@ -103,6 +110,7 @@ public final class ArchiveController {
         });
     }
 
+    @Override
     public void saveArchive() {
         if (!model.isOpen() || model.isReadOnly())
             return;
@@ -118,6 +126,7 @@ public final class ArchiveController {
 
     // ── File-level actions (prompting UI) ──────────────────────────────
 
+    @Override
     public void newFile() {
         if (!model.isOpen() || model.isReadOnly())
             return;
@@ -135,6 +144,7 @@ public final class ArchiveController {
         fileOps.createFile(filePath, "");
     }
 
+    @Override
     public void newDirectory() {
         if (!model.isOpen() || model.isReadOnly())
             return;
@@ -152,6 +162,7 @@ public final class ArchiveController {
         fileOps.createDirectory(dirPath);
     }
 
+    @Override
     public void deleteSelected() {
         FileNode selected = model.getSelectedFile();
         if (selected == null || !model.isOpen() || model.isReadOnly())
@@ -168,6 +179,7 @@ public final class ArchiveController {
         }
     }
 
+    @Override
     public void renameSelected() {
         FileNode selected = model.getSelectedFile();
         if (selected == null || !model.isOpen() || model.isReadOnly())
@@ -187,6 +199,7 @@ public final class ArchiveController {
         fileOps.rename(oldPath, newPath);
     }
 
+    @Override
     public void extractSelected() {
         FileNode selected = model.getSelectedFile();
         if (selected == null || selected.isDirectory())
@@ -202,6 +215,7 @@ public final class ArchiveController {
         }
     }
 
+    @Override
     public void saveFileContent(Path path, String content) {
         fileOps.saveFile(path, content);
     }

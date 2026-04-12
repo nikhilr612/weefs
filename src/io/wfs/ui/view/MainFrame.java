@@ -1,6 +1,7 @@
 package io.wfs.ui.view;
 
 import io.wfs.ui.controller.ArchiveController;
+import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.util.SwingUtils;
 
@@ -21,9 +22,9 @@ public final class MainFrame extends JFrame {
     private static final int DEFAULT_HEIGHT = 700;
 
     private final ArchiveModel model;
-    private final ArchiveController controller;
+    private final IArchiveController controller;
 
-    public MainFrame(ArchiveModel model, ArchiveController controller) {
+    public MainFrame(ArchiveModel model, IArchiveController controller) {
         super(TITLE);
         this.model = model;
         this.controller = controller;

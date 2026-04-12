@@ -1,6 +1,6 @@
 package io.wfs.ui.view;
 
-import io.wfs.ui.controller.ArchiveController;
+import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 import io.wfs.ui.util.FileTypeDetector;
@@ -27,7 +27,7 @@ public final class FileContentPanel extends JPanel {
     private static final String CARD_DIR = "directory";
 
     private final ArchiveModel model;
-    private final ArchiveController controller;
+    private final IArchiveController controller;
 
     private final CardLayout cardLayout;
     private final JTextArea textArea;
@@ -40,7 +40,7 @@ public final class FileContentPanel extends JPanel {
 
     private Path currentFilePath;
 
-    public FileContentPanel(ArchiveModel model, ArchiveController controller) {
+    public FileContentPanel(ArchiveModel model, IArchiveController controller) {
         this.model = model;
         this.controller = controller;
 

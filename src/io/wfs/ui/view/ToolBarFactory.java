@@ -1,6 +1,6 @@
 package io.wfs.ui.view;
 
-import io.wfs.ui.controller.ArchiveController;
+import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.util.IconFactory;
 
@@ -16,7 +16,7 @@ public final class ToolBarFactory {
     private ToolBarFactory() {
     }
 
-    public static JToolBar create(ArchiveController controller, ArchiveModel model) {
+    public static JToolBar create(IArchiveController controller, ArchiveModel model) {
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
         toolBar.setRollover(true);

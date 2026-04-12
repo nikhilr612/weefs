@@ -1,6 +1,6 @@
 package io.wfs.ui.view;
 
-import io.wfs.ui.controller.ArchiveController;
+import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 
 import javax.swing.*;
@@ -17,7 +17,7 @@ public final class MenuBarFactory {
     private MenuBarFactory() {
     }
 
-    public static JMenuBar create(ArchiveController controller, ArchiveModel model) {
+    public static JMenuBar create(IArchiveController controller, ArchiveModel model) {
         JMenuBar menuBar = new JMenuBar();
 
         menuBar.add(createFileMenu(controller, model));
@@ -28,7 +28,7 @@ public final class MenuBarFactory {
         return menuBar;
     }
 
-    private static JMenu createFileMenu(ArchiveController controller, ArchiveModel model) {
+    private static JMenu createFileMenu(IArchiveController controller, ArchiveModel model) {
         JMenu menu = new JMenu("File");
         menu.setMnemonic(KeyEvent.VK_F);
 
@@ -79,7 +79,7 @@ public final class MenuBarFactory {
         return menu;
     }
 
-    private static JMenu createEditMenu(ArchiveController controller, ArchiveModel model) {
+    private static JMenu createEditMenu(IArchiveController controller, ArchiveModel model) {
         JMenu menu = new JMenu("Edit");
         menu.setMnemonic(KeyEvent.VK_E);
 
@@ -140,7 +140,7 @@ public final class MenuBarFactory {
         return menu;
     }
 
-    private static JMenu createHelpMenu(ArchiveController controller) {
+    private static JMenu createHelpMenu(IArchiveController controller) {
         JMenu menu = new JMenu("Help");
         menu.setMnemonic(KeyEvent.VK_H);
 

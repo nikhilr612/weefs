@@ -1,6 +1,6 @@
 package io.wfs.ui.view;
 
-import io.wfs.ui.controller.ArchiveController;
+import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 import io.wfs.ui.util.SwingUtils;
@@ -25,12 +25,12 @@ import java.util.List;
 public final class ArchiveTreePanel extends JPanel {
 
     private final ArchiveModel model;
-    private final ArchiveController controller;
+    private final IArchiveController controller;
     private final JTree tree;
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode rootNode;
 
-    public ArchiveTreePanel(ArchiveModel model, ArchiveController controller) {
+    public ArchiveTreePanel(ArchiveModel model, IArchiveController controller) {
         this.model = model;
         this.controller = controller;
 
