@@ -12,5 +12,6 @@ public class App {
         } else {
             System.out.println("Usage: pass 'integration' to run archive round-trip checks.");
         }
+        // TODO: add tests for
     }
 }
