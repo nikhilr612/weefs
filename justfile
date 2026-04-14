@@ -14,7 +14,11 @@ build: deps
 	jar cvfm bin/artifact.jar MANIFEST.MF -C bin .
 run:
 	java -jar bin/artifact.jar integration
+run-ui: build
+	java -cp "bin:lib/*" io.wfs.ui.MainLauncher
 run-gui:
 	java -jar bin/artifact.jar gui
+test-ui: build
+	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
 clean:
 	rm -rf bin
