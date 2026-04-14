@@ -113,11 +113,17 @@ public final class FileOperations {
     }
 
     /**
-     * Copies the file/directory at sourcePath into the targetDir.
+     * Copies a single file at {@code sourcePath} into {@code targetDir}.
+     * Directories are not supported; callers should iterate children manually.
      */
     public boolean copy(Path sourcePath, Path targetDir) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
+        if (Files.isDirectory(sourcePath)) {
+            showError("Copy", new UnsupportedOperationException(
+                    "Recursive directory copy is not supported; select individual files."));
+            return false;
+        }
         try {
             Path fileName = sourcePath.getFileName();
             if (fileName == null)

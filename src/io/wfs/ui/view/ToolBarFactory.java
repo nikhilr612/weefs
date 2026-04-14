@@ -72,13 +72,15 @@ public final class ToolBarFactory {
         model.addPropertyChangeListener(evt -> SwingUtilities.invokeLater(() -> {
             boolean isOpen = model.isOpen();
             boolean canEdit = isOpen && !model.isReadOnly();
-            boolean hasSel = model.getSelectedFile() != null;
+            var selectedFile = model.getSelectedFile();
+            boolean hasSel = selectedFile != null;
+            boolean isDirectory = hasSel && selectedFile.isDirectory();
 
             closeBtn.setEnabled(isOpen);
             newFileBtn.setEnabled(canEdit);
             newDirBtn.setEnabled(canEdit);
             deleteBtn.setEnabled(canEdit && hasSel);
-            extractBtn.setEnabled(isOpen && hasSel && !model.getSelectedFile().isDirectory());
+            extractBtn.setEnabled(isOpen && hasSel && !isDirectory);
             refreshBtn.setEnabled(isOpen);
         }));
 
