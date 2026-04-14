@@ -22,16 +22,17 @@ import javax.swing.SwingUtilities;
  * These tests exercise the full MVC pipeline (ArchiveModel +
  * ArchiveController + FileOperations) without any visible Swing windows,
  * verifying that:
- *   – archives can be opened, mutated and closed through the controller
- *   – property-change events are fired on the EDT
- *   – the correct old/new event values are reported
- *   – saveArchive() re-opens the archive after persisting
- *   – closeArchive() does not fire PROP_OPEN when nothing is open
- *   – FileOperations rejects directory arguments to copy()
+ * – archives can be opened, mutated and closed through the controller
+ * – property-change events are fired on the EDT
+ * – the correct old/new event values are reported
+ * – saveArchive() re-opens the archive after persisting
+ * – closeArchive() does not fire PROP_OPEN when nothing is open
+ * – FileOperations rejects directory arguments to copy()
  */
 public final class UiIntegrationTest {
 
-    private UiIntegrationTest() {}
+    private UiIntegrationTest() {
+    }
 
     // ── Entry point ────────────────────────────────────────────────────
 
@@ -62,16 +63,18 @@ public final class UiIntegrationTest {
         runWithTempArchive(".zip", (model, archivePath) -> {
             List<Boolean> onEdtFlags = new ArrayList<>();
 
-            model.addPropertyChangeListener(ArchiveModel.PROP_OPEN, evt ->
-                    onEdtFlags.add(SwingUtilities.isEventDispatchThread()));
-            model.addPropertyChangeListener(ArchiveModel.PROP_ARCHIVE_PATH, evt ->
-                    onEdtFlags.add(SwingUtilities.isEventDispatchThread()));
+            model.addPropertyChangeListener(ArchiveModel.PROP_OPEN,
+                    evt -> onEdtFlags.add(SwingUtilities.isEventDispatchThread()));
+            model.addPropertyChangeListener(ArchiveModel.PROP_ARCHIVE_PATH,
+                    evt -> onEdtFlags.add(SwingUtilities.isEventDispatchThread()));
 
             driveModel(model, m -> m.openArchive(archivePath, false));
 
-            if (onEdtFlags.isEmpty()) throw assertionFailure("No events fired for PROP_OPEN / PROP_ARCHIVE_PATH");
+            if (onEdtFlags.isEmpty())
+                throw assertionFailure("No events fired for PROP_OPEN / PROP_ARCHIVE_PATH");
             for (Boolean flag : onEdtFlags) {
-                if (!flag) throw assertionFailure("Property change not fired on EDT");
+                if (!flag)
+                    throw assertionFailure("Property change not fired on EDT");
             }
         });
         System.out.println("    [PASS] openArchive fires events on EDT");
@@ -125,12 +128,13 @@ public final class UiIntegrationTest {
             driveModel(model, m -> m.openArchive(archivePath, false));
 
             AtomicBoolean onEdt = new AtomicBoolean(true);
-            model.addPropertyChangeListener(ArchiveModel.PROP_OPEN, evt ->
-                    onEdt.set(SwingUtilities.isEventDispatchThread()));
+            model.addPropertyChangeListener(ArchiveModel.PROP_OPEN,
+                    evt -> onEdt.set(SwingUtilities.isEventDispatchThread()));
 
             driveModel(model, ArchiveModel::closeArchive);
 
-            if (!onEdt.get()) throw assertionFailure("PROP_OPEN (close) not fired on EDT");
+            if (!onEdt.get())
+                throw assertionFailure("PROP_OPEN (close) not fired on EDT");
         });
         System.out.println("    [PASS] closeArchive fires PROP_OPEN on EDT");
     }
@@ -176,22 +180,26 @@ public final class UiIntegrationTest {
 
             // Create directory
             boolean dirCreated = ctrl.getFileOps().createDirectory(root.resolve("mydir"));
-            if (!dirCreated) throw assertionFailure("createDirectory returned false");
+            if (!dirCreated)
+                throw assertionFailure("createDirectory returned false");
 
             // Create file inside it
             boolean fileCreated = ctrl.getFileOps().createFile(
                     root.resolve("mydir").resolve("hello.txt"), "world");
-            if (!fileCreated) throw assertionFailure("createFile returned false");
+            if (!fileCreated)
+                throw assertionFailure("createFile returned false");
 
             // List children of root — must include mydir
             List<FileNode> children = model.listChildren(root);
             boolean found = children.stream().anyMatch(n -> n.getDisplayName().equals("mydir"));
-            if (!found) throw assertionFailure("mydir not found in root listing");
+            if (!found)
+                throw assertionFailure("mydir not found in root listing");
 
             // Save content
             boolean saved = ctrl.getFileOps().saveFile(
                     root.resolve("mydir").resolve("hello.txt"), "updated");
-            if (!saved) throw assertionFailure("saveFile returned false");
+            if (!saved)
+                throw assertionFailure("saveFile returned false");
 
             // Read back
             String content = model.readFileContent(root.resolve("mydir").resolve("hello.txt"));
@@ -213,14 +221,17 @@ public final class UiIntegrationTest {
             ctrl.getFileOps().createDirectory(root.resolve("srcdir"));
 
             boolean result = ctrl.getFileOps().copy(root.resolve("srcdir"), root);
-            if (result) throw assertionFailure("copy() should return false for directory source");
+            if (result)
+                throw assertionFailure("copy() should return false for directory source");
 
             driveModel(model, ArchiveModel::closeArchive);
         });
         System.out.println("    [PASS] FileOperations.copy() rejects directories");
     }
 
-    /** PROP_OPEN old/new values must be true→false on close and false→true on open. */
+    /**
+     * PROP_OPEN old/new values must be true→false on close and false→true on open.
+     */
     private static void testPropertyChangesOldNewValues() throws Exception {
         System.out.println("    [TEST] PROP_OPEN old/new values are correct");
         runWithTempArchive(".zip", (model, archivePath) -> {
@@ -272,7 +283,8 @@ public final class UiIntegrationTest {
                 if (model.isOpen()) {
                     model.closeArchive();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             deleteRecursive(tempDir);
         }
     }
@@ -309,10 +321,14 @@ public final class UiIntegrationTest {
     }
 
     private static void deleteRecursive(Path root) throws IOException {
-        if (!Files.exists(root)) return;
+        if (!Files.exists(root))
+            return;
         try (var walk = Files.walk(root)) {
             walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception ignored) {
+                }
             });
         }
     }
