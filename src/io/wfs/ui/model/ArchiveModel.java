@@ -1,6 +1,7 @@
 package io.wfs.ui.model;
 
 import io.wfs.core.extractor.ExtZipFsProvider;
+import io.wfs.core.nfs.NfsConnectionConfig;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -16,13 +17,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Central model for the archive browser.
- * Manages the currently mounted archive FileSystem and fires
+ * Central model for the archive/NFS browser.
+ * Manages the currently mounted archive FileSystem or NFS connection and fires
  * property-change events so views can react (Observer pattern).
+ * Supports both archive (ZIP/TAR) and NFS (Network File System) mounting.
  */
 public final class ArchiveModel {
 
     public static final String PROP_ARCHIVE_PATH = "archivePath";
+    public static final String PROP_NFS_CONFIG = "nfsConfig";
     public static final String PROP_OPEN = "open";
     public static final String PROP_READ_ONLY = "readOnly";
     public static final String PROP_SELECTED_FILE = "selectedFile";
@@ -32,6 +35,7 @@ public final class ArchiveModel {
     private final ExtZipFsProvider provider = new ExtZipFsProvider();
 
     private Path archivePath;
+    private NfsConnectionConfig nfsConfig;
     private FileSystem fileSystem;
     private boolean readOnly;
     private FileNode selectedFile;
@@ -96,6 +100,44 @@ public final class ArchiveModel {
         if (oldPath != null) {
             pcs.firePropertyChange(PROP_ARCHIVE_PATH, oldPath, null);
         }
+    }
+
+    /**
+     * Sets the NFS configuration for the currently mounted NFS share.
+     */
+    public void setNfsConfig(NfsConnectionConfig config) throws IOException {
+        // Close archive if one is open
+        if (fileSystem != null) {
+            closeArchive();
+        }
+        
+        NfsConnectionConfig oldConfig = this.nfsConfig;
+        this.nfsConfig = config;
+        
+        if (config != null) {
+            this.readOnly = config.isReadOnly();
+            pcs.firePropertyChange(PROP_OPEN, false, true);
+            pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
+        } else {
+            this.readOnly = false;
+            pcs.firePropertyChange(PROP_OPEN, true, false);
+        }
+        
+        pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
+    }
+
+    /**
+     * Gets the current NFS configuration.
+     */
+    public NfsConnectionConfig getNfsConfig() {
+        return nfsConfig;
+    }
+
+    /**
+     * Checks if an NFS share is currently mounted.
+     */
+    public boolean isNfsMounted() {
+        return nfsConfig != null;
     }
 
     public boolean isOpen() {

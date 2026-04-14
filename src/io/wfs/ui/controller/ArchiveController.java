@@ -1,5 +1,7 @@
 package io.wfs.ui.controller;
 
+import io.wfs.core.nfs.NfsConnectionConfig;
+import io.wfs.core.nfs.NfsFsProvider;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 
@@ -7,23 +9,31 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Default Swing implementation of {@link IArchiveController}.
- * Coordinates between the model and views, handling high-level user
- * actions: open, create, close, save archives.
- * Delegates individual file operations to {@link FileOperations}.
+ * Default Swing implementation of {@link IArchiveController} and {@link INfsController}.
+ * Coordinates between the model and views, handling high-level user actions:
+ * - Archive operations: open, create, close, save
+ * - NFS operations: mount, unmount, file operations
+ * Delegates individual file operations to {@link FileOperations} and {@link NfsFileOperations}.
  */
-public final class ArchiveController implements IArchiveController {
+public final class ArchiveController implements IArchiveController, INfsController {
 
     private final ArchiveModel model;
     private final FileOperations fileOps;
+    private final NfsFileOperations nfsFileOps;
+    private final NfsFsProvider nfsProvider = new NfsFsProvider();
     private Component parentComponent;
+    private NfsConnectionConfig currentNfsConfig;
 
     public ArchiveController(ArchiveModel model) {
         this.model = model;
         this.fileOps = new FileOperations(model);
+        this.nfsFileOps = new NfsFileOperations(model);
     }
 
     @Override
@@ -218,6 +228,94 @@ public final class ArchiveController implements IArchiveController {
     @Override
     public void saveFileContent(Path path, String content) {
         fileOps.saveFile(path, content);
+    }
+
+    // ── NFS operations (INfsController implementation) ───────────────────
+
+    @Override
+    public NfsFileOperations getNfsFileOps() {
+        return nfsFileOps;
+    }
+
+    @Override
+    public void mountNfs() {
+        // Show dialog to get NFS connection details
+        NfsConnectionDialog dialog = new NfsConnectionDialog(parentComponent);
+        NfsConnectionConfig config = dialog.showDialog();
+        
+        if (config == null) {
+            return; // User cancelled
+        }
+
+        executeInBackground("Mounting NFS...", () -> {
+            try {
+                // Here we would typically mount the NFS filesystem
+                // For now, we just store the config and update the model
+                currentNfsConfig = config;
+                model.setNfsConfig(config);
+                JOptionPane.showMessageDialog(parentComponent,
+                        "NFS mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath(),
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                showError("Mount NFS", ex);
+            }
+        });
+    }
+
+    @Override
+    public void unmountNfs() {
+        if (currentNfsConfig == null) {
+            return;
+        }
+
+        executeInBackground("Unmounting NFS...", () -> {
+            try {
+                // Cleanup NFS connection
+                currentNfsConfig = null;
+                model.setNfsConfig(null);
+                model.fireTreeRefresh();
+            } catch (Exception ex) {
+                showError("Unmount NFS", ex);
+            }
+        });
+    }
+
+    @Override
+    public void extractNfsSelected() {
+        if (!isNfsMounted() || model.getSelectedFile() == null || model.getSelectedFile().isDirectory()) {
+            return;
+        }
+
+        FileNode selected = model.getSelectedFile();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Extract NFS File To...");
+        chooser.setSelectedFile(new java.io.File(selected.getDisplayName()));
+
+        if (chooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+            Path destination = chooser.getSelectedFile().toPath();
+            executeInBackground("Extracting file...", () -> {
+                try {
+                    nfsFileOps.extractTo(currentNfsConfig, selected.getPath().toString(), destination);
+                    JOptionPane.showMessageDialog(parentComponent,
+                            "File extracted successfully",
+                            "Success",
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    showError("Extract NFS File", ex);
+                }
+            });
+        }
+    }
+
+    @Override
+    public NfsConnectionConfig getCurrentNfsConfig() {
+        return currentNfsConfig;
+    }
+
+    @Override
+    public boolean isNfsMounted() {
+        return currentNfsConfig != null;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
