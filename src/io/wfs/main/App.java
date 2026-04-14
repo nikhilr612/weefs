@@ -1,5 +1,7 @@
 package io.wfs.main;
 
+import io.wfs.ui.MainLauncher;
+
 public class App {
 
     public static void main(String[] args) throws Exception {
@@ -10,6 +12,6 @@ public class App {
         } else {
             System.out.println("Usage: pass 'integration' to run archive round-trip checks, or 'gui' to launch the archive explorer.");
         }
+        // TODO: add tests for
     }
 }
-
