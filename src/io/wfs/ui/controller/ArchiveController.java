@@ -1,7 +1,6 @@
 package io.wfs.ui.controller;
 
 import io.wfs.core.nfs.NfsConnectionConfig;
-import io.wfs.core.nfs.NfsFsProvider;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 
@@ -9,10 +8,7 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Default Swing implementation of {@link IArchiveController} and {@link INfsController}.
@@ -26,7 +22,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
     private final ArchiveModel model;
     private final FileOperations fileOps;
     private final NfsFileOperations nfsFileOps;
-    private final NfsFsProvider nfsProvider = new NfsFsProvider();
     private Component parentComponent;
     private NfsConnectionConfig currentNfsConfig;
 
@@ -80,6 +75,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Opening archive...", () -> {
             try {
+                clearNfsIfMounted();
                 model.openArchive(selected, readOnly);
             } catch (IOException ex) {
                 showError("Open Archive", ex);
@@ -102,6 +98,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Creating archive...", () -> {
             try {
+                clearNfsIfMounted();
                 model.createArchive(selected);
             } catch (IOException ex) {
                 showError("Create Archive", ex);
@@ -140,6 +137,24 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void newFile() {
         if (!model.isOpen() || model.isReadOnly())
             return;
+
+        if (isNfsMounted()) {
+            FileNode selected = model.getSelectedFile();
+            String parentDir = getTargetNfsDirectory(selected);
+            if (parentDir == null) {
+                return;
+            }
+
+            String name = JOptionPane.showInputDialog(parentComponent,
+                    "Enter file name:", "New File", JOptionPane.PLAIN_MESSAGE);
+            if (name == null || name.isBlank()) {
+                return;
+            }
+
+            nfsFileOps.createFile(currentNfsConfig, joinNfsPath(parentDir, name), "");
+            return;
+        }
+
         FileNode selected = model.getSelectedFile();
         Path parentDir = getTargetDirectory(selected);
         if (parentDir == null)
@@ -158,6 +173,24 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void newDirectory() {
         if (!model.isOpen() || model.isReadOnly())
             return;
+
+        if (isNfsMounted()) {
+            FileNode selected = model.getSelectedFile();
+            String parentDir = getTargetNfsDirectory(selected);
+            if (parentDir == null) {
+                return;
+            }
+
+            String name = JOptionPane.showInputDialog(parentComponent,
+                    "Enter directory name:", "New Directory", JOptionPane.PLAIN_MESSAGE);
+            if (name == null || name.isBlank()) {
+                return;
+            }
+
+            nfsFileOps.createDirectory(currentNfsConfig, joinNfsPath(parentDir, name));
+            return;
+        }
+
         FileNode selected = model.getSelectedFile();
         Path parentDir = getTargetDirectory(selected);
         if (parentDir == null)
@@ -185,7 +218,11 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 JOptionPane.WARNING_MESSAGE);
 
         if (confirm == JOptionPane.YES_OPTION) {
-            fileOps.delete(selected);
+            if (isNfsMounted()) {
+                nfsFileOps.delete(currentNfsConfig, selected.getPath().toString());
+            } else {
+                fileOps.delete(selected);
+            }
         }
     }
 
@@ -200,6 +237,14 @@ public final class ArchiveController implements IArchiveController, INfsControll
         if (newName == null || newName.isBlank())
             return;
 
+        if (isNfsMounted()) {
+            String oldPath = selected.getPath().toString();
+            String parent = getParentNfsPath(oldPath);
+            String newPath = joinNfsPath(parent, newName);
+            nfsFileOps.rename(currentNfsConfig, oldPath, newPath);
+            return;
+        }
+
         Path oldPath = selected.getPath();
         Path parent = oldPath.getParent();
         if (parent == null)
@@ -211,6 +256,11 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void extractSelected() {
+        if (isNfsMounted()) {
+            extractNfsSelected();
+            return;
+        }
+
         FileNode selected = model.getSelectedFile();
         if (selected == null || selected.isDirectory())
             return;
@@ -227,6 +277,10 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void saveFileContent(Path path, String content) {
+        if (isNfsMounted()) {
+            nfsFileOps.saveFile(currentNfsConfig, path.toString(), content);
+            return;
+        }
         fileOps.saveFile(path, content);
     }
 
@@ -253,6 +307,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 // For now, we just store the config and update the model
                 currentNfsConfig = config;
                 model.setNfsConfig(config);
+                model.fireTreeRefresh();  // ← FIX: Refresh tree to show NFS contents
                 JOptionPane.showMessageDialog(parentComponent,
                         "NFS mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath(),
                         "Success",
@@ -330,6 +385,34 @@ public final class ArchiveController implements IArchiveController, INfsControll
         return model.getRootPath();
     }
 
+    private String getTargetNfsDirectory(FileNode selected) {
+        if (selected == null) {
+            return "/";
+        }
+        if (selected.isDirectory()) {
+            return selected.getPath().toString();
+        }
+        return getParentNfsPath(selected.getPath().toString());
+    }
+
+    private String getParentNfsPath(String path) {
+        if (path == null || path.isBlank() || "/".equals(path)) {
+            return "/";
+        }
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash <= 0) {
+            return "/";
+        }
+        return path.substring(0, lastSlash);
+    }
+
+    private String joinNfsPath(String parent, String child) {
+        if (parent == null || parent.isBlank() || "/".equals(parent)) {
+            return "/" + child;
+        }
+        return parent.endsWith("/") ? parent + child : parent + "/" + child;
+    }
+
     private void executeInBackground(String message, Runnable task) {
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override
@@ -345,5 +428,12 @@ public final class ArchiveController implements IArchiveController, INfsControll
         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(parentComponent,
                 operation + " failed:\n" + ex.getMessage(),
                 "Error", JOptionPane.ERROR_MESSAGE));
+    }
+
+    private void clearNfsIfMounted() throws IOException {
+        if (currentNfsConfig != null || model.isNfsMounted()) {
+            currentNfsConfig = null;
+            model.setNfsConfig(null);
+        }
     }
 }
