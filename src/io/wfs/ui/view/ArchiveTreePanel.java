@@ -240,7 +240,8 @@ public final class ArchiveTreePanel extends JPanel {
         if (sel == null)
             return;
 
-        Frame frame = (Frame) SwingUtilities.getWindowAncestor(this);
+        java.awt.Window ancestor = SwingUtilities.getWindowAncestor(this);
+        Frame frame = (ancestor instanceof Frame f) ? f : null;
         new PropertiesDialog(frame,
                 sel.getDisplayName(),
                 sel.getPath().toString(),

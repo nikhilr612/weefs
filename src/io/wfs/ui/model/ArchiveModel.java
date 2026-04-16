@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import javax.swing.SwingUtilities;
 
 /**
  * Central model for the archive browser.
@@ -56,6 +57,7 @@ public final class ArchiveModel {
     public void openArchive(Path archive, boolean readOnly) throws IOException {
         closeArchive();
 
+        boolean previousReadOnly = this.readOnly;
         this.readOnly = readOnly;
         Path oldPath = this.archivePath;
         this.archivePath = archive;
@@ -64,9 +66,15 @@ public final class ArchiveModel {
         Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
         this.fileSystem = provider.newFileSystem(uri, env);
 
-        pcs.firePropertyChange(PROP_ARCHIVE_PATH, oldPath, archive);
-        pcs.firePropertyChange(PROP_OPEN, false, true);
-        pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
+        final Path finalOldPath = oldPath;
+        final boolean finalPreviousReadOnly = previousReadOnly;
+        fireOnEdt(() -> {
+            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, archive);
+            pcs.firePropertyChange(PROP_OPEN, false, true);
+            if (previousReadOnly != readOnly) {
+                pcs.firePropertyChange(PROP_READ_ONLY, finalPreviousReadOnly, readOnly);
+            }
+        });
     }
 
     /**
@@ -86,6 +94,7 @@ public final class ArchiveModel {
      * Closes the currently mounted archive.
      */
     public void closeArchive() throws IOException {
+        boolean wasOpen = isOpen();
         if (fileSystem != null && fileSystem.isOpen()) {
             fileSystem.close();
         }
@@ -93,9 +102,13 @@ public final class ArchiveModel {
         Path oldPath = archivePath;
         archivePath = null;
         selectedFile = null;
-        pcs.firePropertyChange(PROP_OPEN, true, false);
-        if (oldPath != null) {
-            pcs.firePropertyChange(PROP_ARCHIVE_PATH, oldPath, null);
+        if (wasOpen) {
+            fireOnEdt(() -> {
+                pcs.firePropertyChange(PROP_OPEN, true, false);
+                if (oldPath != null) {
+                    pcs.firePropertyChange(PROP_ARCHIVE_PATH, oldPath, null);
+                }
+            });
         }
     }
 
@@ -149,14 +162,23 @@ public final class ArchiveModel {
     public void setSelectedFile(FileNode node) {
         FileNode old = this.selectedFile;
         this.selectedFile = node;
-        pcs.firePropertyChange(PROP_SELECTED_FILE, old, node);
+        fireOnEdt(() -> pcs.firePropertyChange(PROP_SELECTED_FILE, old, node));
     }
 
     /**
      * Signals that the tree structure has changed and views should refresh.
      */
     public void fireTreeRefresh() {
-        pcs.firePropertyChange(PROP_TREE_REFRESH, null, System.currentTimeMillis());
+        fireOnEdt(() -> pcs.firePropertyChange(PROP_TREE_REFRESH, null, System.currentTimeMillis()));
+    }
+
+    /** Dispatches {@code action} on the EDT; runs immediately if already on it. */
+    private static void fireOnEdt(Runnable action) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            action.run();
+        } else {
+            SwingUtilities.invokeLater(action);
+        }
     }
 
     /**

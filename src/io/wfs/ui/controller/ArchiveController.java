@@ -78,6 +78,10 @@ public final class ArchiveController implements IArchiveController {
                 new String[] { "Read/Write", "Read Only" },
                 "Read/Write");
 
+        if (mode == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+
         boolean readOnly = (mode == 1);
 
         executeInBackground("Opening archive...", () -> {
@@ -351,11 +355,21 @@ public final class ArchiveController implements IArchiveController {
     }
 
     private void executeInBackground(String message, Runnable task) {
+        if (parentComponent != null) {
+            parentComponent.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.WAIT_CURSOR));
+        }
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
                 task.run();
                 return null;
+            }
+
+            @Override
+            protected void done() {
+                if (parentComponent != null) {
+                    parentComponent.setCursor(java.awt.Cursor.getDefaultCursor());
+                }
             }
         };
         worker.execute();

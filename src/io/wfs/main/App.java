@@ -8,9 +8,9 @@ public class App {
         if (args.length > 0 && "integration".equalsIgnoreCase(args[0])) {
             ArchiveIntegrationTest.run();
         } else if (args.length > 0 && "gui".equalsIgnoreCase(args[0])) {
-            MainLauncher.main(args);
+            io.wfs.ui.WeeFsApp.start();
         } else {
-            System.out.println("Usage: pass 'integration' to run archive round-trip checks.");
+            System.out.println("Usage: pass 'integration' to run archive round-trip checks, or 'gui' to launch the archive explorer.");
         }
         // TODO: add tests for
     }

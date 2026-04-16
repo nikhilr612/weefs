@@ -70,8 +70,10 @@ public final class MenuBarFactory {
         // Enable/disable based on open state
         model.addPropertyChangeListener(ArchiveModel.PROP_OPEN, evt -> {
             boolean isOpen = Boolean.TRUE.equals(evt.getNewValue());
-            close.setEnabled(isOpen);
-            save.setEnabled(isOpen && !model.isReadOnly());
+            SwingUtilities.invokeLater(() -> {
+                close.setEnabled(isOpen);
+                save.setEnabled(isOpen && !model.isReadOnly());
+            });
         });
         close.setEnabled(false);
         save.setEnabled(false);
