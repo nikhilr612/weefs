@@ -119,8 +119,65 @@ public class NfsFsProvider extends FileSystemProvider {
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
                                                FileAttribute<?>... attrs) throws IOException {
         NfsPath nfsPath = castPath(path);
-        byte[] content = NfsIO.readFile(nfsPath.getFileSystem().getConfig(), nfsPath.toString());
+        NfsConnectionConfig config = nfsPath.getFileSystem().getConfig();
+
+        boolean write = options.contains(java.nio.file.StandardOpenOption.WRITE)
+                || options.contains(java.nio.file.StandardOpenOption.APPEND);
+        boolean create = options.contains(java.nio.file.StandardOpenOption.CREATE)
+                || options.contains(java.nio.file.StandardOpenOption.CREATE_NEW);
+
+        if (write || create) {
+            if (config.isReadOnly()) {
+                throw new IOException("NFS mount is read-only");
+            }
+            return new NfsWritableByteChannel(config, nfsPath.toString());
+        }
+
+        byte[] content = NfsIO.readFile(config, nfsPath.toString());
         return new ByteArraySeekableByteChannel(content);
+    }
+
+    /**
+     * Writable SeekableByteChannel that flushes to NFS on close.
+     */
+    private static class NfsWritableByteChannel implements SeekableByteChannel {
+        private final NfsConnectionConfig config;
+        private final String remotePath;
+        private final java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        private boolean closed;
+        private int position;
+
+        NfsWritableByteChannel(NfsConnectionConfig config, String remotePath) {
+            this.config = config;
+            this.remotePath = remotePath;
+        }
+
+        @Override public int read(ByteBuffer dst) { throw new UnsupportedOperationException("Write-only channel"); }
+
+        @Override
+        public int write(ByteBuffer src) throws IOException {
+            if (closed) throw new IOException("Channel is closed");
+            int len = src.remaining();
+            byte[] data = new byte[len];
+            src.get(data);
+            buf.write(data);
+            position += len;
+            return len;
+        }
+
+        @Override public long position() { return position; }
+        @Override public SeekableByteChannel position(long newPosition) { position = (int) newPosition; return this; }
+        @Override public long size() { return buf.size(); }
+        @Override public SeekableByteChannel truncate(long size) { throw new UnsupportedOperationException(); }
+        @Override public boolean isOpen() { return !closed; }
+
+        @Override
+        public void close() throws IOException {
+            if (!closed) {
+                closed = true;
+                NfsIO.writeFile(config, remotePath, buf.toByteArray());
+            }
+        }
     }
 
     /**
@@ -292,7 +349,15 @@ public class NfsFsProvider extends FileSystemProvider {
 
     @Override
     public void checkAccess(Path path, AccessMode... modes) throws IOException {
-        // Always grant access for NFS
+        NfsPath nfsPath = castPath(path);
+        nfsPath.getFileSystem().ensureOpen();
+        if (modes != null) {
+            for (AccessMode mode : modes) {
+                if (mode == AccessMode.WRITE) {
+                    nfsPath.getFileSystem().ensureWritable();
+                }
+            }
+        }
     }
 
     // ────────────────────────────────────────────────────────────────

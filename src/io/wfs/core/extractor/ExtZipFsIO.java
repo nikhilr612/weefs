@@ -27,11 +27,7 @@ final class ExtZipFsIO {
     }
 
     static void extractArchiveToDirectory(Path archiveFile, Path targetRoot) throws IOException {
-        if (isTarArchive(archiveFile)) {
-            extractTarToDirectory(archiveFile, targetRoot);
-            return;
-        }
-        extractZipToDirectory(archiveFile, targetRoot);
+        ArchiveFormats.extractToDirectory(archiveFile, targetRoot);
     }
 
     static void extractZipToDirectory(Path zipArchive, Path targetRoot) throws IOException {
@@ -100,11 +96,7 @@ final class ExtZipFsIO {
     }
 
     static void writeDirectoryToArchive(Path sourceRoot, Path archiveFile) throws IOException {
-        if (isTarArchive(archiveFile)) {
-            writeDirectoryToTar(sourceRoot, archiveFile);
-            return;
-        }
-        writeDirectoryToZip(sourceRoot, archiveFile);
+        ArchiveFormats.writeFromDirectory(sourceRoot, archiveFile);
     }
 
     static void writeDirectoryToZip(Path sourceRoot, Path archiveFile) throws IOException {
@@ -214,8 +206,4 @@ final class ExtZipFsIO {
         return relativePath.toString().replace(File.separatorChar, '/');
     }
 
-    private static boolean isTarArchive(Path archiveFile) {
-        String name = archiveFile.getFileName().toString().toLowerCase();
-        return name.endsWith(".tar");
-    }
 }

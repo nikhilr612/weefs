@@ -149,15 +149,27 @@ public final class NfsIO {
     // ────────────────────────────────────────────────────────────────
 
     private static Path getCachePath(NfsConnectionConfig config) {
-        // In production: use system temp or configured NFS mount point
-        // For now: use user's temp with NFS host/export as directory name
         Path tempBase = Path.of(System.getProperty("java.io.tmpdir"))
                 .resolve("weefs-nfs");
-        String cacheDir = String.format("%s_%d_%s", 
-                config.getHost().replace(".", "_"),
-                config.getPort(),
-                config.getExportPath().replace("/", "_"));
+        // Sanitize host and export path to prevent path traversal
+        String safeHost = sanitizePathComponent(config.getHost());
+        String safeExport = sanitizePathComponent(config.getExportPath());
+        String cacheDir = String.format("%s_%d_%s", safeHost, config.getPort(), safeExport);
         return tempBase.resolve(cacheDir);
+    }
+
+    /**
+     * Sanitizes a string for use as a file path component by removing
+     * dangerous characters and path traversal sequences.
+     */
+    private static String sanitizePathComponent(String input) {
+        if (input == null || input.isEmpty()) {
+            return "default";
+        }
+        // Replace path separators, dots sequences, and special characters
+        return input.replaceAll("[/\\\\]", "_")
+                     .replaceAll("\\.\\.", "_")
+                     .replaceAll("[^a-zA-Z0-9._\\-]", "_");
     }
 
     private static String normalizePath(String path) {
@@ -168,6 +180,10 @@ public final class NfsIO {
         String normalized = path.replace("\\", "/");
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
+        }
+        // Block path traversal attempts
+        if (normalized.contains("..")) {
+            throw new IllegalArgumentException("Path traversal not allowed: " + path);
         }
         return normalized.isEmpty() ? "." : normalized;
     }

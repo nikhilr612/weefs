@@ -16,8 +16,17 @@ public class App {
                     System.out.println("Running NFS integration tests...");
                     NfsIntegrationTest.run();
                     break;
+                case "unit":
+                    System.out.println("Running unit tests...");
+                    CoreExtractorTest.run();
+                    CoreNfsTest.run();
+                    ModelTest.run();
+                    break;
                 case "all-integration":
-                    System.out.println("Running all integration tests...");
+                    System.out.println("Running all tests...");
+                    CoreExtractorTest.run();
+                    CoreNfsTest.run();
+                    ModelTest.run();
                     ArchiveIntegrationTest.run();
                     NfsIntegrationTest.run();
                     break;
@@ -37,7 +46,8 @@ public class App {
         System.out.println("Usage:");
         System.out.println("  integration       - Run archive integration tests");
         System.out.println("  nfs-integration   - Run NFS integration tests");
-        System.out.println("  all-integration   - Run all integration tests");
+        System.out.println("  unit              - Run unit tests (extractor, NFS, model)");
+        System.out.println("  all-integration   - Run all tests (unit + integration)");
         System.out.println("  gui               - Launch GUI application");
     }
 }

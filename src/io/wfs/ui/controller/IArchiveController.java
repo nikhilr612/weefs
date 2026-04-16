@@ -43,9 +43,9 @@ public interface IArchiveController {
     /**
      * Returns the file-operations delegate used for low-level mutations.
      *
-     * @return the {@link FileOperations} instance; never {@code null}
+     * @return the {@link IFileOperations} instance; never {@code null}
      */
-    FileOperations getFileOps();
+    IFileOperations getFileOps();
 
     // ── Archive lifecycle ─────────────────────────────────────────────
 

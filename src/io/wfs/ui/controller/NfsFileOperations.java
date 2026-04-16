@@ -3,30 +3,98 @@ package io.wfs.ui.controller;
 import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.core.nfs.NfsIO;
 import io.wfs.ui.model.ArchiveModel;
-import io.wfs.ui.model.FileNode;
 
 import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 /**
  * Encapsulates NFS file-level operations.
- * Mirrors FileOperations but works with NFS file systems.
- * Following the Command pattern (GRASP) — each method is an atomic operation.
+ * Implements {@link IFileOperations} for polymorphic use by controllers.
+ * Requires an active {@link NfsConnectionConfig} to perform operations.
  */
-public final class NfsFileOperations {
+public final class NfsFileOperations implements IFileOperations {
 
     private final ArchiveModel model;
+    private volatile NfsConnectionConfig config;
 
     public NfsFileOperations(ArchiveModel model) {
         this.model = model;
     }
 
     /**
+     * Sets the active NFS connection configuration.
+     *
+     * @param config the NFS config, or null to clear
+     */
+    public void setConfig(NfsConnectionConfig config) {
+        this.config = config;
+    }
+
+    /**
+     * Returns the active NFS connection configuration.
+     *
+     * @return the config, or null if not connected
+     */
+    public NfsConnectionConfig getConfig() {
+        return config;
+    }
+
+    @Override
+    public boolean createFile(Path path, String content) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return createFile(cfg, path.toString(), content);
+    }
+
+    @Override
+    public boolean createDirectory(Path path) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return createDirectory(cfg, path.toString());
+    }
+
+    @Override
+    public boolean delete(Path path) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return delete(cfg, path.toString());
+    }
+
+    @Override
+    public boolean rename(Path oldPath, Path newPath) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return rename(cfg, oldPath.toString(), newPath.toString());
+    }
+
+    @Override
+    public boolean saveFile(Path path, String content) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return saveFile(cfg, path.toString(), content);
+    }
+
+    @Override
+    public boolean extractTo(Path sourcePath, Path destination) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return extractTo(cfg, sourcePath.toString(), destination);
+    }
+
+    @Override
+    public boolean copy(Path sourcePath, Path targetDir) {
+        NfsConnectionConfig cfg = this.config;
+        if (cfg == null) return false;
+        return copy(cfg, sourcePath.toString(), targetDir.toString());
+    }
+
+    /**
      * Creates a new file on the NFS mount with supplied text content.
      */
     public boolean createFile(NfsConnectionConfig config, String remotePath, String content) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {
@@ -43,7 +111,7 @@ public final class NfsFileOperations {
      * Creates a new directory on the NFS mount.
      */
     public boolean createDirectory(NfsConnectionConfig config, String remotePath) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {
@@ -60,7 +128,7 @@ public final class NfsFileOperations {
      * Deletes a file or directory from the NFS mount.
      */
     public boolean delete(NfsConnectionConfig config, String remotePath) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {
@@ -78,7 +146,7 @@ public final class NfsFileOperations {
      * Renames/moves a file or directory on the NFS mount.
      */
     public boolean rename(NfsConnectionConfig config, String oldPath, String newPath) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {
@@ -95,7 +163,7 @@ public final class NfsFileOperations {
      * Writes text content to an existing file on NFS.
      */
     public boolean saveFile(NfsConnectionConfig config, String remotePath, String content) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {
@@ -111,7 +179,7 @@ public final class NfsFileOperations {
      * Copies a file on the NFS mount.
      */
     public boolean copy(NfsConnectionConfig config, String sourcePath, String destPath) {
-        if (!model.isOpen() || model.isReadOnly()) {
+        if (config.isReadOnly()) {
             return false;
         }
         try {

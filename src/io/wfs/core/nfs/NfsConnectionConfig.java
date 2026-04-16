@@ -22,12 +22,35 @@ public final class NfsConnectionConfig {
             String mountPath,
             int timeoutSeconds,
             boolean readOnly) {
-        this.host = Objects.requireNonNull(host, "host");
+        this.host = validateHost(host);
         this.port = validatePort(port);
-        this.exportPath = Objects.requireNonNull(exportPath, "exportPath");
-        this.mountPath = Objects.requireNonNull(mountPath, "mountPath");
+        this.exportPath = validatePath(exportPath, "exportPath");
+        this.mountPath = validatePath(mountPath, "mountPath");
         this.timeoutSeconds = validateTimeout(timeoutSeconds);
         this.readOnly = readOnly;
+    }
+
+    private static String validateHost(String host) {
+        Objects.requireNonNull(host, "host");
+        String trimmed = host.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Host must not be empty");
+        }
+        // Block path traversal and command injection in hostname
+        if (trimmed.contains("..") || trimmed.contains("/") || trimmed.contains("\\")
+                || trimmed.contains(";") || trimmed.contains("&") || trimmed.contains("|")) {
+            throw new IllegalArgumentException("Invalid hostname: " + trimmed);
+        }
+        return trimmed;
+    }
+
+    private static String validatePath(String path, String name) {
+        Objects.requireNonNull(path, name);
+        // Block path traversal
+        if (path.contains("..")) {
+            throw new IllegalArgumentException(name + " must not contain '..': " + path);
+        }
+        return path;
     }
 
     private static int validatePort(int port) {

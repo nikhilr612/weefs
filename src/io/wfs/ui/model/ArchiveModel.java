@@ -133,14 +133,18 @@ public final class ArchiveModel {
         
         if (config != null) {
             this.readOnly = config.isReadOnly();
-            pcs.firePropertyChange(PROP_OPEN, false, true);
-            pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
+            fireOnEdt(() -> {
+                pcs.firePropertyChange(PROP_OPEN, false, true);
+                pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
+                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
+            });
         } else {
             this.readOnly = false;
-            pcs.firePropertyChange(PROP_OPEN, true, false);
+            fireOnEdt(() -> {
+                pcs.firePropertyChange(PROP_OPEN, true, false);
+                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, null);
+            });
         }
-        
-        pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
     }
 
     /**

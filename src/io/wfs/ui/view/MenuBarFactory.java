@@ -55,8 +55,28 @@ public final class MenuBarFactory {
         JMenuItem exit = new JMenuItem("Exit");
         exit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
         exit.addActionListener(e -> {
+            if (model.isOpen() && !model.isReadOnly()) {
+                java.awt.Window[] windows = java.awt.Window.getWindows();
+                java.awt.Component parent = null;
+                for (java.awt.Window w : windows) {
+                    if (w instanceof JFrame) {
+                        parent = w;
+                        break;
+                    }
+                }
+                int choice = JOptionPane.showConfirmDialog(parent,
+                        "Save changes before exiting?",
+                        "Unsaved Changes",
+                        JOptionPane.YES_NO_CANCEL_OPTION,
+                        JOptionPane.QUESTION_MESSAGE);
+                if (choice == JOptionPane.CANCEL_OPTION) {
+                    return;
+                }
+            }
             try {
-                model.closeArchive();
+                if (model.isOpen()) {
+                    model.closeArchive();
+                }
             } catch (Exception ignored) {
             }
             System.exit(0);
