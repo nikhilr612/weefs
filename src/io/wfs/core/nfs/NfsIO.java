@@ -11,7 +11,8 @@ import java.util.stream.Stream;
 
 /**
  * Encapsulates NFS I/O operations: connect, list, read, write, delete.
- * Uses local FileSystem operations to simulate NFS (production would use jnfs library).
+ * Uses local FileSystem operations to simulate NFS (production would use jnfs
+ * library).
  * Utility class following Pure Fabrication pattern (GRASP).
  */
 public final class NfsIO {
@@ -168,8 +169,8 @@ public final class NfsIO {
         }
         // Replace path separators, dots sequences, and special characters
         return input.replaceAll("[/\\\\]", "_")
-                     .replaceAll("\\.\\.", "_")
-                     .replaceAll("[^a-zA-Z0-9._\\-]", "_");
+                .replaceAll("\\.\\.", "_")
+                .replaceAll("[^a-zA-Z0-9._\\-]", "_");
     }
 
     private static String normalizePath(String path) {

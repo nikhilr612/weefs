@@ -1,6 +1,8 @@
 package io.wfs.main;
 
 import io.wfs.ui.MainLauncher;
+import io.wfs.core.nfs.CoreNfsPathTest;
+import io.wfs.core.extractor.CoreExtractorUriTest;
 
 public class App {
 
@@ -19,14 +21,20 @@ public class App {
                 case "unit":
                     System.out.println("Running unit tests...");
                     CoreExtractorTest.run();
+                    CoreExtractorUriTest.run();
                     CoreNfsTest.run();
+                    CoreNfsPathTest.run();
                     ModelTest.run();
+                    UtilTest.run();
                     break;
                 case "all-integration":
                     System.out.println("Running all tests...");
                     CoreExtractorTest.run();
+                    CoreExtractorUriTest.run();
                     CoreNfsTest.run();
+                    CoreNfsPathTest.run();
                     ModelTest.run();
+                    UtilTest.run();
                     ArchiveIntegrationTest.run();
                     NfsIntegrationTest.run();
                     break;

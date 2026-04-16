@@ -126,11 +126,11 @@ public final class ArchiveModel {
         if (fileSystem != null) {
             closeArchive();
         }
-        
+
         NfsConnectionConfig oldConfig = this.nfsConfig;
         this.nfsConfig = config;
         this.selectedFile = null;
-        
+
         if (config != null) {
             this.readOnly = config.isReadOnly();
             fireOnEdt(() -> {

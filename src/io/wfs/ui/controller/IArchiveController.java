@@ -8,16 +8,21 @@ import java.nio.file.Path;
 /**
  * Contract for the UI controller component in the MVC triad.
  *
- * <p>Views depend on this interface — never on the concrete
+ * <p>
+ * Views depend on this interface — never on the concrete
  * {@link ArchiveController} — so alternative implementations
  * (headless, test doubles, remote delegates) can be substituted
- * without touching any view code.</p>
+ * without touching any view code.
+ * </p>
  *
- * <p>Responsibilities encoded here:</p>
+ * <p>
+ * Responsibilities encoded here:
+ * </p>
  * <ul>
- *   <li>Archive lifecycle — open, create, close, save</li>
- *   <li>File-level mutations — new file/dir, rename, delete, extract, save content</li>
- *   <li>Infrastructure — parent-component registration, model access</li>
+ * <li>Archive lifecycle — open, create, close, save</li>
+ * <li>File-level mutations — new file/dir, rename, delete, extract, save
+ * content</li>
+ * <li>Infrastructure — parent-component registration, model access</li>
  * </ul>
  */
 public interface IArchiveController {

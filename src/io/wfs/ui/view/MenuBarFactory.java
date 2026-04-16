@@ -111,11 +111,13 @@ public final class MenuBarFactory {
         INfsController nfsController = (INfsController) controller;
 
         JMenuItem mountNfs = new JMenuItem("Mount NFS...");
-        mountNfs.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_M, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        mountNfs.setAccelerator(
+                KeyStroke.getKeyStroke(KeyEvent.VK_M, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         mountNfs.addActionListener(e -> nfsController.mountNfs());
 
         JMenuItem unmountNfs = new JMenuItem("Unmount NFS");
-        unmountNfs.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        unmountNfs.setAccelerator(
+                KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         unmountNfs.addActionListener(e -> nfsController.unmountNfs());
         unmountNfs.setEnabled(false);
 
@@ -132,11 +134,12 @@ public final class MenuBarFactory {
         model.addPropertyChangeListener(ArchiveModel.PROP_NFS_CONFIG, evt -> {
             boolean isMounted = nfsController.isNfsMounted();
             unmountNfs.setEnabled(isMounted);
-            extractNfs.setEnabled(isMounted && model.getSelectedFile() != null && !model.getSelectedFile().isDirectory());
+            extractNfs
+                    .setEnabled(isMounted && model.getSelectedFile() != null && !model.getSelectedFile().isDirectory());
         });
-        
+
         model.addPropertyChangeListener(ArchiveModel.PROP_SELECTED_FILE, evt -> {
-            boolean canExtract = nfsController.isNfsMounted() && model.getSelectedFile() != null 
+            boolean canExtract = nfsController.isNfsMounted() && model.getSelectedFile() != null
                     && !model.getSelectedFile().isDirectory();
             extractNfs.setEnabled(canExtract);
         });

@@ -13,8 +13,7 @@ public final class ArchiveFormats {
 
     private static final List<ArchiveFormat> FORMATS = List.of(
             new ZipArchiveFormat(),
-            new TarArchiveFormat()
-    );
+            new TarArchiveFormat());
 
     private ArchiveFormats() {
     }

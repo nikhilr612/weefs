@@ -44,49 +44,56 @@ public final class NfsFileOperations implements IFileOperations {
     @Override
     public boolean createFile(Path path, String content) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return createFile(cfg, path.toString(), content);
     }
 
     @Override
     public boolean createDirectory(Path path) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return createDirectory(cfg, path.toString());
     }
 
     @Override
     public boolean delete(Path path) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return delete(cfg, path.toString());
     }
 
     @Override
     public boolean rename(Path oldPath, Path newPath) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return rename(cfg, oldPath.toString(), newPath.toString());
     }
 
     @Override
     public boolean saveFile(Path path, String content) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return saveFile(cfg, path.toString(), content);
     }
 
     @Override
     public boolean extractTo(Path sourcePath, Path destination) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return extractTo(cfg, sourcePath.toString(), destination);
     }
 
     @Override
     public boolean copy(Path sourcePath, Path targetDir) {
         NfsConnectionConfig cfg = this.config;
-        if (cfg == null) return false;
+        if (cfg == null)
+            return false;
         return copy(cfg, sourcePath.toString(), targetDir.toString());
     }
 
@@ -209,11 +216,9 @@ public final class NfsFileOperations implements IFileOperations {
     }
 
     private void showError(String title, IOException ex) {
-        SwingUtilities.invokeLater(() ->
-                JOptionPane.showMessageDialog(null,
-                        title + " failed:\n" + ex.getMessage(),
-                        title,
-                        JOptionPane.ERROR_MESSAGE)
-        );
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
+                title + " failed:\n" + ex.getMessage(),
+                title,
+                JOptionPane.ERROR_MESSAGE));
     }
 }

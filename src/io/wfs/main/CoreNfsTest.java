@@ -48,6 +48,7 @@ final class CoreNfsTest {
         testReadOnlyDeleteRejected();
         testReadOnlyCreateDirRejected();
         testReadOnlyRenameRejected();
+        testReadOnlyCopyRejected();
 
         // NfsIO functional
         testWriteReadOverwrite();
@@ -55,6 +56,8 @@ final class CoreNfsTest {
         testDeleteNonExistentIsIdempotent();
         testCreateNestedDirectory();
         testListSortsDirsFirst();
+        testCopyFile();
+        testVerifyConnection();
 
         System.out.println("  All core NFS tests passed.");
     }
@@ -172,9 +175,12 @@ final class CoreNfsTest {
         NfsConnectionConfig c = new NfsConnectionConfig("other", 2049, "/e", "/m", 30, false);
 
         // equals ignores readOnly (checks host, port, export, mount only)
-        if (!a.equals(b)) throw fail("Same host/port/paths should be equal regardless of readOnly");
-        if (a.equals(c)) throw fail("Different host should not be equal");
-        if (a.hashCode() != b.hashCode()) throw fail("Equal configs should have same hashCode");
+        if (!a.equals(b))
+            throw fail("Same host/port/paths should be equal regardless of readOnly");
+        if (a.equals(c))
+            throw fail("Different host should not be equal");
+        if (a.hashCode() != b.hashCode())
+            throw fail("Equal configs should have same hashCode");
         System.out.println("    [PASS] Config equals/hashCode");
     }
 
@@ -182,9 +188,12 @@ final class CoreNfsTest {
         System.out.println("    [TEST] Config toString");
         NfsConnectionConfig config = new NfsConnectionConfig("myhost", 2049, "/share", "/mnt", 30, true);
         String str = config.toString();
-        if (!str.contains("myhost")) throw fail("toString should contain host");
-        if (!str.contains("2049")) throw fail("toString should contain port");
-        if (!str.contains("/share")) throw fail("toString should contain export");
+        if (!str.contains("myhost"))
+            throw fail("toString should contain host");
+        if (!str.contains("2049"))
+            throw fail("toString should contain port");
+        if (!str.contains("/share"))
+            throw fail("toString should contain export");
         System.out.println("    [PASS] Config toString");
     }
 
@@ -321,7 +330,8 @@ final class CoreNfsTest {
             NfsIO.createDirectory(config, "/emptydir");
 
             List<NfsFileInfo> list = NfsIO.listDirectory(config, "/emptydir");
-            if (!list.isEmpty()) throw fail("Expected empty list for empty dir, got " + list.size());
+            if (!list.isEmpty())
+                throw fail("Expected empty list for empty dir, got " + list.size());
         } finally {
             cleanup(tempDir);
         }
@@ -372,7 +382,8 @@ final class CoreNfsTest {
             NfsIO.writeFile(config, "/aaa-file.txt", "f".getBytes());
 
             List<NfsFileInfo> list = NfsIO.listDirectory(config, "/");
-            if (list.size() < 3) throw fail("Expected at least 3 items, got " + list.size());
+            if (list.size() < 3)
+                throw fail("Expected at least 3 items, got " + list.size());
 
             // First entry should be a directory
             if (!list.get(0).isDirectory())
@@ -381,6 +392,60 @@ final class CoreNfsTest {
             cleanup(tempDir);
         }
         System.out.println("    [PASS] NfsIO listDirectory sorts dirs first");
+    }
+
+    private static void testReadOnlyCopyRejected() throws Exception {
+        System.out.println("    [TEST] Read-only config rejects copy");
+        Path tempDir = Files.createTempDirectory("weefs-nfs-ro-");
+        try {
+            NfsConnectionConfig rwConfig = new NfsConnectionConfig(
+                    "localhost", 2049, "/export", tempDir.toString(), 30, false);
+            NfsIO.writeFile(rwConfig, "/source.txt", "data".getBytes());
+
+            NfsConnectionConfig roConfig = new NfsConnectionConfig(
+                    "localhost", 2049, "/export", tempDir.toString(), 30, true);
+            try {
+                NfsIO.copy(roConfig, "/source.txt", "/dest.txt");
+                throw fail("Copy should be rejected on read-only");
+            } catch (IOException expected) {
+                // Good
+            }
+        } finally {
+            cleanup(tempDir);
+        }
+        System.out.println("    [PASS] Read-only config rejects copy");
+    }
+
+    private static void testCopyFile() throws Exception {
+        System.out.println("    [TEST] NfsIO copy file");
+        Path tempDir = Files.createTempDirectory("weefs-nfs-func-");
+        try {
+            NfsConnectionConfig config = new NfsConnectionConfig(
+                    "localhost", 2049, "/export", tempDir.toString(), 30, false);
+
+            NfsIO.writeFile(config, "/original.txt", "copy-me".getBytes());
+            NfsIO.copy(config, "/original.txt", "/copied.txt");
+
+            byte[] data = NfsIO.readFile(config, "/copied.txt");
+            assertEqual("copy-me", new String(data), "copied content");
+        } finally {
+            cleanup(tempDir);
+        }
+        System.out.println("    [PASS] NfsIO copy file");
+    }
+
+    private static void testVerifyConnection() throws Exception {
+        System.out.println("    [TEST] NfsIO verifyConnection creates cache dir");
+        Path tempDir = Files.createTempDirectory("weefs-nfs-func-");
+        try {
+            NfsConnectionConfig config = new NfsConnectionConfig(
+                    "localhost", 2049, "/export", tempDir.toString(), 30, false);
+            NfsIO.verifyConnection(config);
+            // Should not throw — cache directory should be created/exist
+        } finally {
+            cleanup(tempDir);
+        }
+        System.out.println("    [PASS] NfsIO verifyConnection creates cache dir");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
@@ -414,13 +479,18 @@ final class CoreNfsTest {
 
     private static void cleanup(Path root) {
         try {
-            if (!Files.exists(root)) return;
+            if (!Files.exists(root))
+                return;
             try (var walk = Files.walk(root)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (Exception ignored) {
+                    }
                 });
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private static IllegalStateException fail(String msg) {

@@ -58,9 +58,12 @@ final class ModelTest {
         System.out.println("    [TEST] FileNode explicit constructor");
         Path p = Path.of("/tmp/test-filenode");
         FileNode node = new FileNode(p, "test-filenode", true);
-        if (!node.isDirectory()) throw fail("Should be directory");
-        if (!"test-filenode".equals(node.getDisplayName())) throw fail("Wrong display name");
-        if (!p.equals(node.getPath())) throw fail("Wrong path");
+        if (!node.isDirectory())
+            throw fail("Should be directory");
+        if (!"test-filenode".equals(node.getDisplayName()))
+            throw fail("Wrong display name");
+        if (!p.equals(node.getPath()))
+            throw fail("Wrong path");
         System.out.println("    [PASS] FileNode explicit constructor");
     }
 
@@ -95,9 +98,12 @@ final class ModelTest {
         FileNode file = new FileNode(Path.of("/f"), "Alpha", false);
         FileNode fileB = new FileNode(Path.of("/f2"), "Beta", false);
 
-        if (dir.compareTo(file) >= 0) throw fail("Directory should sort before file");
-        if (file.compareTo(dir) <= 0) throw fail("File should sort after directory");
-        if (file.compareTo(fileB) >= 0) throw fail("Alpha should sort before Beta");
+        if (dir.compareTo(file) >= 0)
+            throw fail("Directory should sort before file");
+        if (file.compareTo(dir) <= 0)
+            throw fail("File should sort after directory");
+        if (file.compareTo(fileB) >= 0)
+            throw fail("Alpha should sort before Beta");
         System.out.println("    [PASS] FileNode compareTo (dirs first, then name)");
     }
 
@@ -107,9 +113,12 @@ final class ModelTest {
         FileNode b = new FileNode(Path.of("/same"), "B", true);
         FileNode c = new FileNode(Path.of("/other"), "A", false);
 
-        if (!a.equals(b)) throw fail("Same path should be equal");
-        if (a.equals(c)) throw fail("Different path should not be equal");
-        if (a.hashCode() != b.hashCode()) throw fail("Equal nodes should share hashCode");
+        if (!a.equals(b))
+            throw fail("Same path should be equal");
+        if (a.equals(c))
+            throw fail("Different path should not be equal");
+        if (a.hashCode() != b.hashCode())
+            throw fail("Equal nodes should share hashCode");
         System.out.println("    [PASS] FileNode equals/hashCode");
     }
 
@@ -125,11 +134,16 @@ final class ModelTest {
     private static void testModelInitialState() {
         System.out.println("    [TEST] ArchiveModel initial state");
         ArchiveModel model = new ArchiveModel();
-        if (model.isOpen()) throw fail("Model should not be open initially");
-        if (model.isReadOnly()) throw fail("Model should not be read-only initially");
-        if (model.isNfsMounted()) throw fail("Model should not have NFS initially");
-        if (model.getArchivePath() != null) throw fail("Archive path should be null initially");
-        if (model.getSelectedFile() != null) throw fail("Selected file should be null initially");
+        if (model.isOpen())
+            throw fail("Model should not be open initially");
+        if (model.isReadOnly())
+            throw fail("Model should not be read-only initially");
+        if (model.isNfsMounted())
+            throw fail("Model should not have NFS initially");
+        if (model.getArchivePath() != null)
+            throw fail("Archive path should be null initially");
+        if (model.getSelectedFile() != null)
+            throw fail("Selected file should be null initially");
         System.out.println("    [PASS] ArchiveModel initial state");
     }
 
@@ -142,13 +156,17 @@ final class ModelTest {
 
             model.openArchive(zipFile, false);
             pumpEdt();
-            if (!model.isOpen()) throw fail("Model should be open");
-            if (model.isReadOnly()) throw fail("Model should be writable");
-            if (!zipFile.equals(model.getArchivePath())) throw fail("Wrong archive path");
+            if (!model.isOpen())
+                throw fail("Model should be open");
+            if (model.isReadOnly())
+                throw fail("Model should be writable");
+            if (!zipFile.equals(model.getArchivePath()))
+                throw fail("Wrong archive path");
 
             model.closeArchive();
             pumpEdt();
-            if (model.isOpen()) throw fail("Model should be closed");
+            if (model.isOpen())
+                throw fail("Model should be closed");
         } finally {
             cleanup(tempDir);
         }
@@ -164,7 +182,8 @@ final class ModelTest {
 
             model.openArchive(zipFile, true);
             pumpEdt();
-            if (!model.isReadOnly()) throw fail("Model should be read-only");
+            if (!model.isReadOnly())
+                throw fail("Model should be read-only");
 
             model.closeArchive();
             pumpEdt();
@@ -184,8 +203,10 @@ final class ModelTest {
         model.setSelectedFile(node);
         pumpEdt();
 
-        if (events.isEmpty()) throw fail("PROP_SELECTED_FILE not fired");
-        if (events.get(0).getNewValue() != node) throw fail("Wrong new value");
+        if (events.isEmpty())
+            throw fail("PROP_SELECTED_FILE not fired");
+        if (events.get(0).getNewValue() != node)
+            throw fail("Wrong new value");
         System.out.println("    [PASS] ArchiveModel setSelectedFile fires event");
     }
 
@@ -217,8 +238,10 @@ final class ModelTest {
         model.setNfsConfig(config);
         pumpEdt();
 
-        if (onEdt.get() == null) throw fail("Event was not fired");
-        if (!onEdt.get()) throw fail("NFS config event not fired on EDT");
+        if (onEdt.get() == null)
+            throw fail("Event was not fired");
+        if (!onEdt.get())
+            throw fail("NFS config event not fired on EDT");
         System.out.println("    [PASS] ArchiveModel setNfsConfig fires on EDT");
     }
 
@@ -231,7 +254,8 @@ final class ModelTest {
         model.fireTreeRefresh();
         pumpEdt();
 
-        if (events.isEmpty()) throw fail("PROP_TREE_REFRESH not fired");
+        if (events.isEmpty())
+            throw fail("PROP_TREE_REFRESH not fired");
         System.out.println("    [PASS] ArchiveModel fireTreeRefresh");
     }
 
@@ -250,12 +274,15 @@ final class ModelTest {
             Files.createDirectories(root.resolve("subdir"));
 
             List<FileNode> children = model.listChildren(root);
-            if (children.size() < 2) throw fail("Expected at least 2 children, got " + children.size());
+            if (children.size() < 2)
+                throw fail("Expected at least 2 children, got " + children.size());
 
             boolean hasFile = children.stream().anyMatch(n -> n.getDisplayName().equals("file.txt"));
             boolean hasDir = children.stream().anyMatch(n -> n.getDisplayName().equals("subdir"));
-            if (!hasFile) throw fail("Missing file.txt in listing");
-            if (!hasDir) throw fail("Missing subdir in listing");
+            if (!hasFile)
+                throw fail("Missing file.txt in listing");
+            if (!hasDir)
+                throw fail("Missing subdir in listing");
 
             model.closeArchive();
             pumpEdt();
@@ -306,13 +333,18 @@ final class ModelTest {
 
     private static void cleanup(Path root) {
         try {
-            if (!Files.exists(root)) return;
+            if (!Files.exists(root))
+                return;
             try (var walk = Files.walk(root)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (Exception ignored) {
+                    }
                 });
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private static IllegalStateException fail(String msg) {

@@ -4,7 +4,8 @@ import java.util.Objects;
 
 /**
  * Immutable configuration for an NFS connection.
- * Encapsulates host, port, export path, and mount options (Factory pattern material).
+ * Encapsulates host, port, export path, and mount options (Factory pattern
+ * material).
  */
 public final class NfsConnectionConfig {
 
@@ -98,8 +99,10 @@ public final class NfsConnectionConfig {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof NfsConnectionConfig)) return false;
+        if (this == o)
+            return true;
+        if (!(o instanceof NfsConnectionConfig))
+            return false;
         NfsConnectionConfig that = (NfsConnectionConfig) o;
         return port == that.port &&
                 Objects.equals(host, that.host) &&

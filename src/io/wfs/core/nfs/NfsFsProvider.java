@@ -28,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * NFS FileSystemProvider extending Java NIO.2 SPI.
- * Enables mounting NFS file systems as providers accessible via FileSystems.newFileSystem().
+ * Enables mounting NFS file systems as providers accessible via
+ * FileSystems.newFileSystem().
  * Follows the Provider pattern and maintains cache of active mounts.
  */
 public class NfsFsProvider extends FileSystemProvider {
@@ -48,7 +49,8 @@ public class NfsFsProvider extends FileSystemProvider {
 
     /**
      * Creates and mounts a new NFS file system.
-     * URI format: nfs://hostname:port/export/path?mount=/mount/path&readOnly=false&timeout=30
+     * URI format:
+     * nfs://hostname:port/export/path?mount=/mount/path&readOnly=false&timeout=30
      */
     @Override
     public FileSystem newFileSystem(java.net.URI uri, Map<String, ?> env) throws IOException {
@@ -63,8 +65,7 @@ public class NfsFsProvider extends FileSystemProvider {
         // Check if already mounted
         if (mounted.containsKey(key)) {
             throw new FileSystemAlreadyExistsException(
-                    "NFS already mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath()
-            );
+                    "NFS already mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath());
         }
 
         try {
@@ -76,8 +77,7 @@ public class NfsFsProvider extends FileSystemProvider {
 
             if (previous != null) {
                 throw new FileSystemAlreadyExistsException(
-                        "NFS already mounted: " + key
-                );
+                        "NFS already mounted: " + key);
             }
 
             fs.installShutdownHook();
@@ -117,7 +117,7 @@ public class NfsFsProvider extends FileSystemProvider {
 
     @Override
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
-                                               FileAttribute<?>... attrs) throws IOException {
+            FileAttribute<?>... attrs) throws IOException {
         NfsPath nfsPath = castPath(path);
         NfsConnectionConfig config = nfsPath.getFileSystem().getConfig();
 
@@ -152,11 +152,15 @@ public class NfsFsProvider extends FileSystemProvider {
             this.remotePath = remotePath;
         }
 
-        @Override public int read(ByteBuffer dst) { throw new UnsupportedOperationException("Write-only channel"); }
+        @Override
+        public int read(ByteBuffer dst) {
+            throw new UnsupportedOperationException("Write-only channel");
+        }
 
         @Override
         public int write(ByteBuffer src) throws IOException {
-            if (closed) throw new IOException("Channel is closed");
+            if (closed)
+                throw new IOException("Channel is closed");
             int len = src.remaining();
             byte[] data = new byte[len];
             src.get(data);
@@ -165,11 +169,31 @@ public class NfsFsProvider extends FileSystemProvider {
             return len;
         }
 
-        @Override public long position() { return position; }
-        @Override public SeekableByteChannel position(long newPosition) { position = (int) newPosition; return this; }
-        @Override public long size() { return buf.size(); }
-        @Override public SeekableByteChannel truncate(long size) { throw new UnsupportedOperationException(); }
-        @Override public boolean isOpen() { return !closed; }
+        @Override
+        public long position() {
+            return position;
+        }
+
+        @Override
+        public SeekableByteChannel position(long newPosition) {
+            position = (int) newPosition;
+            return this;
+        }
+
+        @Override
+        public long size() {
+            return buf.size();
+        }
+
+        @Override
+        public SeekableByteChannel truncate(long size) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean isOpen() {
+            return !closed;
+        }
 
         @Override
         public void close() throws IOException {
@@ -195,8 +219,10 @@ public class NfsFsProvider extends FileSystemProvider {
 
         @Override
         public int read(ByteBuffer dst) throws IOException {
-            if (closed) throw new IOException("Channel is closed");
-            if (!buffer.hasRemaining()) return -1;
+            if (closed)
+                throw new IOException("Channel is closed");
+            if (!buffer.hasRemaining())
+                return -1;
             int bytesToRead = Math.min(dst.remaining(), buffer.remaining());
             dst.put(buffer.array(), buffer.position(), bytesToRead);
             buffer.position(buffer.position() + bytesToRead);
@@ -215,7 +241,8 @@ public class NfsFsProvider extends FileSystemProvider {
 
         @Override
         public SeekableByteChannel position(long newPosition) {
-            if (newPosition < 0) throw new IllegalArgumentException("Negative position");
+            if (newPosition < 0)
+                throw new IllegalArgumentException("Negative position");
             buffer.position((int) newPosition);
             return this;
         }
@@ -246,7 +273,7 @@ public class NfsFsProvider extends FileSystemProvider {
             throws IOException {
         NfsPath nfsPath = castPath(dir);
         NfsConnectionConfig config = nfsPath.getFileSystem().getConfig();
-        
+
         return new DirectoryStream<Path>() {
             @Override
             public Iterator<Path> iterator() {
@@ -289,7 +316,7 @@ public class NfsFsProvider extends FileSystemProvider {
 
     @Override
     public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type,
-                                                             LinkOption... options) throws IOException {
+            LinkOption... options) throws IOException {
         throw new UnsupportedOperationException("Attribute reading not implemented for NFS");
     }
 
@@ -307,7 +334,7 @@ public class NfsFsProvider extends FileSystemProvider {
 
     @Override
     public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
-                                                                 LinkOption... options) {
+            LinkOption... options) {
         return null;
     }
 

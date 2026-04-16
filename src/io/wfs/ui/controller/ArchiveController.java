@@ -11,11 +11,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Default Swing implementation of {@link IArchiveController} and {@link INfsController}.
+ * Default Swing implementation of {@link IArchiveController} and
+ * {@link INfsController}.
  * Coordinates between the model and views, handling high-level user actions:
  * - Archive operations: open, create, close, save
  * - NFS operations: mount, unmount, file operations
- * Delegates individual file operations to {@link FileOperations} and {@link NfsFileOperations}.
+ * Delegates individual file operations to {@link FileOperations} and
+ * {@link NfsFileOperations}.
  */
 public final class ArchiveController implements IArchiveController, INfsController {
 
@@ -145,11 +147,13 @@ public final class ArchiveController implements IArchiveController, INfsControll
             return;
 
         Path parentDir = resolveTargetDirectory();
-        if (parentDir == null) return;
+        if (parentDir == null)
+            return;
 
         String name = JOptionPane.showInputDialog(parentComponent,
                 "Enter file name:", "New File", JOptionPane.PLAIN_MESSAGE);
-        if (name == null || name.isBlank()) return;
+        if (name == null || name.isBlank())
+            return;
 
         getFileOps().createFile(parentDir.resolve(name), "");
     }
@@ -160,11 +164,13 @@ public final class ArchiveController implements IArchiveController, INfsControll
             return;
 
         Path parentDir = resolveTargetDirectory();
-        if (parentDir == null) return;
+        if (parentDir == null)
+            return;
 
         String name = JOptionPane.showInputDialog(parentComponent,
                 "Enter directory name:", "New Directory", JOptionPane.PLAIN_MESSAGE);
-        if (name == null || name.isBlank()) return;
+        if (name == null || name.isBlank())
+            return;
 
         getFileOps().createDirectory(parentDir.resolve(name));
     }
@@ -199,7 +205,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         Path oldPath = selected.getPath();
         Path parent = oldPath.getParent();
-        if (parent == null) return;
+        if (parent == null)
+            return;
 
         getFileOps().rename(oldPath, parent.resolve(newName));
     }
@@ -237,7 +244,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
         // Show dialog to get NFS connection details
         NfsConnectionDialog dialog = new NfsConnectionDialog(parentComponent);
         NfsConnectionConfig config = dialog.showDialog();
-        
+
         if (config == null) {
             return; // User cancelled
         }
@@ -247,7 +254,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 currentNfsConfig = config;
                 nfsFileOps.setConfig(config);
                 model.setNfsConfig(config);
-                model.fireTreeRefresh();  // ← FIX: Refresh tree to show NFS contents
+                model.fireTreeRefresh(); // ← FIX: Refresh tree to show NFS contents
                 JOptionPane.showMessageDialog(parentComponent,
                         "NFS mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath(),
                         "Success",

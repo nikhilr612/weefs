@@ -54,7 +54,8 @@ final class CoreExtractorTest {
         try {
             Files.write(tmp, new byte[0]); // create empty file
             ArchiveFormat format = ArchiveFormats.resolve(tmp);
-            if (format == null) throw fail("resolve returned null for .zip");
+            if (format == null)
+                throw fail("resolve returned null for .zip");
         } finally {
             Files.deleteIfExists(tmp);
         }
@@ -66,7 +67,8 @@ final class CoreExtractorTest {
         Path tmp = Files.createTempFile("test", ".tar");
         try {
             ArchiveFormat format = ArchiveFormats.resolve(tmp);
-            if (format == null) throw fail("resolve returned null for .tar");
+            if (format == null)
+                throw fail("resolve returned null for .tar");
         } finally {
             Files.deleteIfExists(tmp);
         }
@@ -186,8 +188,10 @@ final class CoreExtractorTest {
                 Path parent = file.getParent();
                 Path fileName = file.getFileName();
 
-                if (parent == null) throw fail("getParent() is null");
-                if (fileName == null) throw fail("getFileName() is null");
+                if (parent == null)
+                    throw fail("getParent() is null");
+                if (fileName == null)
+                    throw fail("getFileName() is null");
                 if (!fileName.toString().equals("file.txt"))
                     throw fail("getFileName() = " + fileName);
             }
@@ -230,9 +234,12 @@ final class CoreExtractorTest {
                 Path b = fs.getPath("/dir/file.txt");
                 Path c = fs.getPath("/other.txt");
 
-                if (!a.equals(b)) throw fail("Same paths should be equal");
-                if (a.equals(c)) throw fail("Different paths should not be equal");
-                if (a.hashCode() != b.hashCode()) throw fail("Equal paths should have same hashCode");
+                if (!a.equals(b))
+                    throw fail("Same paths should be equal");
+                if (a.equals(c))
+                    throw fail("Different paths should not be equal");
+                if (a.hashCode() != b.hashCode())
+                    throw fail("Equal paths should have same hashCode");
             }
         } finally {
             cleanup(tempDir);
@@ -250,9 +257,12 @@ final class CoreExtractorTest {
             try (FileSystem fs = provider.newFileSystem(uri, Map.of())) {
                 Path a = fs.getPath("/aaa.txt");
                 Path b = fs.getPath("/bbb.txt");
-                if (a.compareTo(b) >= 0) throw fail("aaa should come before bbb");
-                if (b.compareTo(a) <= 0) throw fail("bbb should come after aaa");
-                if (a.compareTo(a) != 0) throw fail("Same path compareTo should be 0");
+                if (a.compareTo(b) >= 0)
+                    throw fail("aaa should come before bbb");
+                if (b.compareTo(a) <= 0)
+                    throw fail("bbb should come after aaa");
+                if (a.compareTo(a) != 0)
+                    throw fail("Same path compareTo should be 0");
             }
         } finally {
             cleanup(tempDir);
@@ -279,7 +289,8 @@ final class CoreExtractorTest {
                         count++;
                     }
                 }
-                if (count < 3) throw fail("Expected at least 3 entries, got " + count);
+                if (count < 3)
+                    throw fail("Expected at least 3 entries, got " + count);
             }
         } finally {
             cleanup(tempDir);
@@ -310,8 +321,9 @@ final class CoreExtractorTest {
                         count++;
                     }
                 }
-                // Empty archive — root may have 0 entries
-                if (count < 0) throw fail("Negative count impossible");
+                // Empty archive — root should have 0 entries
+                if (count != 0)
+                    throw fail("Expected 0 entries in empty archive, got " + count);
             }
         } finally {
             cleanup(tempDir);
@@ -423,13 +435,18 @@ final class CoreExtractorTest {
 
     private static void cleanup(Path root) {
         try {
-            if (!Files.exists(root)) return;
+            if (!Files.exists(root))
+                return;
             try (var walk = Files.walk(root)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (Exception ignored) {
+                    }
                 });
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private static IllegalStateException fail(String msg) {

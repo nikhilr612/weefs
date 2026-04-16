@@ -300,11 +300,14 @@ public final class FileContentPanel extends JPanel {
             for (int i = 0; i < lines; i++) {
                 try {
                     java.awt.geom.Rectangle2D lineRect2D = textArea.modelToView2D(textArea.getLineStartOffset(i));
-                    if (lineRect2D == null) continue;
+                    if (lineRect2D == null)
+                        continue;
                     int y = (int) lineRect2D.getY();
                     int lineH = (int) lineRect2D.getHeight();
-                    if (y + lineH < clip.y) continue;
-                    if (y > clip.y + clip.height) break;
+                    if (y + lineH < clip.y)
+                        continue;
+                    if (y > clip.y + clip.height)
+                        break;
 
                     String num = String.valueOf(i + 1);
                     int x = getWidth() - fm.stringWidth(num) - 6;
