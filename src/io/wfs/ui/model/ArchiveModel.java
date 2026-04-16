@@ -49,7 +49,8 @@ public final class ArchiveModel {
     }
 
     /**
-     * Opens an archive (ZIP or TAR) at the given local path.
+     * Opens an archive at the given local path.
+     * Supported formats include ZIP, TAR, TAR+compression, and single-file compressed streams.
      * If an archive is already open, it is closed first.
      */
     public void openArchive(Path archive, boolean readOnly) throws IOException {

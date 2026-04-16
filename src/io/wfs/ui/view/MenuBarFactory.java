@@ -46,7 +46,7 @@ public final class MenuBarFactory {
         close.addActionListener(e -> controller.closeArchive());
 
         JMenuItem save = new JMenuItem("Save Archive");
-        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
+        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         save.addActionListener(e -> controller.saveArchive());
 
         JMenuItem exit = new JMenuItem("Exit");
