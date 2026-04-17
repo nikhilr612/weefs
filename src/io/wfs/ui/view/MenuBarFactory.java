@@ -41,6 +41,11 @@ public final class MenuBarFactory {
         open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
         open.addActionListener(e -> controller.openArchive());
 
+        JMenuItem mountNfs = new JMenuItem("Mount NFS...");
+        mountNfs.setAccelerator(
+            KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        mountNfs.addActionListener(e -> controller.mountNfs());
+
         JMenuItem close = new JMenuItem("Close Archive");
         close.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
         close.addActionListener(e -> controller.closeArchive());
@@ -61,6 +66,7 @@ public final class MenuBarFactory {
 
         menu.add(newArchive);
         menu.add(open);
+        menu.add(mountNfs);
         menu.addSeparator();
         menu.add(close);
         menu.add(save);

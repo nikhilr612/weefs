@@ -26,6 +26,9 @@ public final class ToolBarFactory {
         JButton openBtn = makeButton("Open", IconFactory.archiveIcon(), "Open an archive (Ctrl+O)");
         openBtn.addActionListener(e -> controller.openArchive());
 
+        JButton mountNfsBtn = makeButton("Mount NFS", null, "Mount a remote weefs:// URI");
+        mountNfsBtn.addActionListener(e -> controller.mountNfs());
+
         JButton newArchiveBtn = makeButton("New", IconFactory.archiveIcon(), "Create a new archive (Ctrl+Shift+N)");
         newArchiveBtn.addActionListener(e -> controller.createArchive());
 
@@ -34,6 +37,7 @@ public final class ToolBarFactory {
         closeBtn.setEnabled(false);
 
         toolBar.add(openBtn);
+        toolBar.add(mountNfsBtn);
         toolBar.add(newArchiveBtn);
         toolBar.add(closeBtn);
         toolBar.addSeparator();

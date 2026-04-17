@@ -1,6 +1,6 @@
 package io.wfs.ui.model;
 
-import io.wfs.core.extractor.ExtZipFsProvider;
+import io.wfs.core.filesystem.FileSystemFactory;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -30,7 +30,7 @@ public final class ArchiveModel {
     public static final String PROP_TREE_REFRESH = "treeRefresh";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
-    private final ExtZipFsProvider provider = new ExtZipFsProvider();
+    private final FileSystemFactory fileSystemFactory = new FileSystemFactory();
 
     private Path archivePath;
     private FileSystem fileSystem;
@@ -54,21 +54,35 @@ public final class ArchiveModel {
      * If an archive is already open, it is closed first.
      */
     public void openArchive(Path archive, boolean readOnly) throws IOException {
+        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
+        openMountUri(uri, readOnly, archive);
+    }
+
+    /**
+     * Mounts a URI-based file system, including weefs:// remotes.
+     */
+    public void openMountUri(URI uri, boolean readOnly) throws IOException {
+        Path displayPath = Path.of(uri.getHost() == null
+                ? uri.toString()
+                : uri.getHost() + uri.getPath());
+        openMountUri(uri, readOnly, displayPath);
+    }
+
+    private void openMountUri(URI uri, boolean readOnly, Path displayPath) throws IOException {
         closeArchive();
 
         boolean previousReadOnly = this.readOnly;
         this.readOnly = readOnly;
         Path oldPath = this.archivePath;
-        this.archivePath = archive;
+        this.archivePath = displayPath;
 
-        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
         Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
-        this.fileSystem = provider.newFileSystem(uri, env);
+        this.fileSystem = fileSystemFactory.open(uri, env);
 
         final Path finalOldPath = oldPath;
         final boolean finalPreviousReadOnly = previousReadOnly;
         fireOnEdt(() -> {
-            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, archive);
+            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, displayPath);
             pcs.firePropertyChange(PROP_OPEN, false, true);
             if (previousReadOnly != readOnly) {
                 pcs.firePropertyChange(PROP_READ_ONLY, finalPreviousReadOnly, readOnly);
