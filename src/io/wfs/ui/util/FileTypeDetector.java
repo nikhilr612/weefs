@@ -22,7 +22,7 @@ public final class FileTypeDetector {
     private static final Set<String> BINARY_EXTENSIONS = Set.of(
             "class", "jar", "war", "ear", "exe", "dll", "so", "o",
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-            "zip", "tar", "gz", "bz2", "xz", "7z", "rar");
+            "zip", "tar", "gz", "bz2", "xz", "lzma", "7z", "rar");
 
     public enum FileType {
         TEXT, IMAGE, BINARY, UNKNOWN

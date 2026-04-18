@@ -18,6 +18,15 @@ final class ArchiveIntegrationTest {
         try {
             roundTrip(tempRoot.resolve("sample.zip"), "zip");
             roundTrip(tempRoot.resolve("sample.tar"), "tar");
+            roundTrip(tempRoot.resolve("sample.tar.gz"), "targz");
+            roundTrip(tempRoot.resolve("sample.tar.bz2"), "tarbz2");
+            roundTrip(tempRoot.resolve("sample.tar.xz"), "tarxz");
+            roundTrip(tempRoot.resolve("sample.tar.lzma"), "tarlzma");
+            singleFileRoundTrip(tempRoot.resolve("single.gz"), "single-gz");
+            singleFileRoundTrip(tempRoot.resolve("single.bz2"), "single-bz2");
+            singleFileRoundTrip(tempRoot.resolve("single.xz"), "single-xz");
+            singleFileRoundTrip(tempRoot.resolve("single.lzma"), "single-lzma");
+            singleFileEmptyRoundTrip(tempRoot.resolve("empty.gz"));
             System.out.println("All integration checks passed.");
         } finally {
             cleanup(tempRoot);
@@ -44,6 +53,53 @@ final class ArchiveIntegrationTest {
         }
 
         System.out.println("  [PASS] " + kind);
+    }
+
+    private static void singleFileRoundTrip(Path archivePath, String contentSeed) throws Exception {
+        ExtZipFsProvider provider = new ExtZipFsProvider();
+        URI uri = URI.create("xzip:" + archivePath.toUri() + "!/");
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of())) {
+            Files.writeString(fs.getPath("/payload.txt"), contentSeed, StandardOpenOption.CREATE);
+        }
+
+        if (!Files.exists(archivePath) || Files.size(archivePath) == 0L) {
+            throw new IllegalStateException("Archive was not written: " + archivePath);
+        }
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of("readOnly", "true"))) {
+            assertContent(fs.getPath("/" + deriveOutputName(archivePath)), contentSeed);
+        }
+
+        System.out.println("  [PASS] " + archivePath.getFileName());
+    }
+
+    private static void singleFileEmptyRoundTrip(Path archivePath) throws Exception {
+        ExtZipFsProvider provider = new ExtZipFsProvider();
+        URI uri = URI.create("xzip:" + archivePath.toUri() + "!/");
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of())) {
+            // Keep archive root empty; close should still succeed for single-file compressed formats.
+        }
+
+        if (!Files.exists(archivePath) || Files.size(archivePath) == 0L) {
+            throw new IllegalStateException("Empty single-file archive was not written: " + archivePath);
+        }
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of("readOnly", "true"))) {
+            // Opening and closing should be valid even when payload is empty.
+        }
+
+        System.out.println("  [PASS] " + archivePath.getFileName() + " (empty)");
+    }
+
+    private static String deriveOutputName(Path archivePath) {
+        String name = archivePath.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            return name.substring(0, dot);
+        }
+        return name;
     }
 
     private static void assertContent(Path path, String expected) throws Exception {

@@ -1,6 +1,7 @@
 package io.wfs.ui.view;
 
 import io.wfs.ui.controller.IArchiveController;
+import io.wfs.ui.controller.INfsController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.util.IconFactory;
 
@@ -10,6 +11,7 @@ import java.awt.*;
 /**
  * Factory for creating the application toolbar.
  * Uses the Factory pattern to centralize toolbar construction.
+ * Includes both archive and NFS operation buttons.
  */
 public final class ToolBarFactory {
 
@@ -21,6 +23,8 @@ public final class ToolBarFactory {
         toolBar.setFloatable(false);
         toolBar.setRollover(true);
         toolBar.setBorderPainted(true);
+
+        INfsController nfsController = (INfsController) controller;
 
         // Archive operations
         JButton openBtn = makeButton("Open", IconFactory.archiveIcon(), "Open an archive (Ctrl+O)");
@@ -36,6 +40,18 @@ public final class ToolBarFactory {
         toolBar.add(openBtn);
         toolBar.add(newArchiveBtn);
         toolBar.add(closeBtn);
+        toolBar.addSeparator();
+
+        // NFS operations
+        JButton mountNfsBtn = makeButton("Mount NFS", IconFactory.folderIcon(), "Mount NFS share (Ctrl+Shift+M)");
+        mountNfsBtn.addActionListener(e -> nfsController.mountNfs());
+
+        JButton unmountNfsBtn = makeButton("Unmount NFS", null, "Unmount NFS share (Ctrl+Shift+U)");
+        unmountNfsBtn.addActionListener(e -> nfsController.unmountNfs());
+        unmountNfsBtn.setEnabled(false);
+
+        toolBar.add(mountNfsBtn);
+        toolBar.add(unmountNfsBtn);
         toolBar.addSeparator();
 
         // File operations
@@ -55,11 +71,16 @@ public final class ToolBarFactory {
         extractBtn.addActionListener(e -> controller.extractSelected());
         extractBtn.setEnabled(false);
 
+        JButton extractNfsBtn = makeButton("Extract NFS", null, "Extract NFS file to disk");
+        extractNfsBtn.addActionListener(e -> nfsController.extractNfsSelected());
+        extractNfsBtn.setEnabled(false);
+
         toolBar.add(newFileBtn);
         toolBar.add(newDirBtn);
         toolBar.addSeparator();
         toolBar.add(deleteBtn);
         toolBar.add(extractBtn);
+        toolBar.add(extractNfsBtn);
         toolBar.addSeparator();
 
         // Refresh
@@ -75,12 +96,16 @@ public final class ToolBarFactory {
             var selectedFile = model.getSelectedFile();
             boolean hasSel = selectedFile != null;
             boolean isDirectory = hasSel && selectedFile.isDirectory();
+            boolean nfsMounted = nfsController.isNfsMounted();
 
             closeBtn.setEnabled(isOpen);
+            mountNfsBtn.setEnabled(!nfsMounted);
+            unmountNfsBtn.setEnabled(nfsMounted);
             newFileBtn.setEnabled(canEdit);
             newDirBtn.setEnabled(canEdit);
             deleteBtn.setEnabled(canEdit && hasSel);
             extractBtn.setEnabled(isOpen && hasSel && !isDirectory);
+            extractNfsBtn.setEnabled(nfsMounted && hasSel && !isDirectory);
             refreshBtn.setEnabled(isOpen);
         }));
 
