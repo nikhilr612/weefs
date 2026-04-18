@@ -1,7 +1,5 @@
 package io.wfs.ui.controller;
 
-import io.wfs.core.nfs.NfsConnectionConfig;
-
 /**
  * Extension interface for NFS control operations.
  * Complements IArchiveController with NFS-specific methods.
@@ -33,12 +31,6 @@ public interface INfsController {
      * Only for files, not directories.
      */
     void extractNfsSelected();
-
-    /**
-     * Gets the current NFS connection configuration if one is mounted.
-     * @return the configuration, or null if not mounted
-     */
-    NfsConnectionConfig getCurrentNfsConfig();
 
     /**
      * Checks if an NFS share is currently mounted.

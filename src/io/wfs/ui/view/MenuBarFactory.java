@@ -8,6 +8,7 @@ import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.io.IOException;
 
 /**
  * Factory for creating the application menu bar.
@@ -82,7 +83,7 @@ public final class MenuBarFactory {
                 if (model.isOpen()) {
                     model.closeArchive();
                 }
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
             System.exit(0);
         });

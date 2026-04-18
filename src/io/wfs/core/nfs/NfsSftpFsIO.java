@@ -25,6 +25,9 @@ import java.util.Vector;
 
 final class NfsSftpFsIO {
 
+    /** Timeout in milliseconds for both the JSch session and SFTP channel connection. */
+    private static final int SFTP_CONNECT_TIMEOUT_MS = 15_000;
+
     static final class RemoteEntry {
         private final String name;
         private final boolean directory;
@@ -308,10 +311,10 @@ final class NfsSftpFsIO {
             session = jsch.getSession(config.username(), config.host(), config.port());
             session.setPassword(config.password());
             session.setConfig("StrictHostKeyChecking", resolveStrictHostKeyChecking());
-            session.connect(15_000);
+            session.connect(SFTP_CONNECT_TIMEOUT_MS);
 
             Channel raw = session.openChannel("sftp");
-            raw.connect(15_000);
+            raw.connect(SFTP_CONNECT_TIMEOUT_MS);
             channel = (ChannelSftp) raw;
 
             return work.run(channel);

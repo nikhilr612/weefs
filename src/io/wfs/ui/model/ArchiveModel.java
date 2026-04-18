@@ -1,6 +1,7 @@
 package io.wfs.ui.model;
 
 import io.wfs.core.filesystem.FileSystemFactory;
+import io.wfs.core.filesystem.FsEnvKeys;
 import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.core.nfs.NfsFileInfo;
 import io.wfs.core.nfs.NfsIO;
@@ -98,7 +99,7 @@ public final class ArchiveModel {
         boolean newRemoteMounted = "weefs".equalsIgnoreCase(uri.getScheme());
         this.remoteMounted = newRemoteMounted;
 
-        Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
+        Map<String, String> env = readOnly ? Map.of(FsEnvKeys.READ_ONLY, "true") : Map.of();
         this.fileSystem = fileSystemFactory.open(uri, env);
 
         final Path finalOldPath = oldPath;

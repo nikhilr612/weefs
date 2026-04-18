@@ -1,5 +1,6 @@
 package io.wfs.core.extractor;
 
+import io.wfs.core.filesystem.FsEnvKeys;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
@@ -55,7 +56,7 @@ public class ExtZipFsProvider extends FileSystemProvider {
                 ExtZipFsIO.extractArchiveToDirectory(archive, tempRoot);
             }
 
-            Object readOnlyValue = safeEnv.containsKey("readOnly") ? safeEnv.get("readOnly") : "false";
+            Object readOnlyValue = safeEnv.containsKey(FsEnvKeys.READ_ONLY) ? safeEnv.get(FsEnvKeys.READ_ONLY) : "false";
             boolean readOnly = Boolean.parseBoolean(String.valueOf(readOnlyValue));
             ExtZipFileSystem fs = new ExtZipFileSystem(this, archive, tempRoot, readOnly);
 

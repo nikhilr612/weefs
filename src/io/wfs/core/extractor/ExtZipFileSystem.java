@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.UserPrincipalLookupService;
 import java.nio.file.spi.FileSystemProvider;
@@ -69,8 +70,12 @@ final class ExtZipFileSystem extends FileSystem {
         }
         if (readOnly && options != null) {
             for (OpenOption option : options) {
-                String name = String.valueOf(option).toUpperCase();
-                if (name.contains("WRITE") || name.contains("APPEND") || name.contains("CREATE") || name.contains("TRUNCATE")) {
+                if (option == StandardOpenOption.WRITE
+                        || option == StandardOpenOption.APPEND
+                        || option == StandardOpenOption.CREATE
+                        || option == StandardOpenOption.CREATE_NEW
+                        || option == StandardOpenOption.TRUNCATE_EXISTING
+                        || option == StandardOpenOption.DELETE_ON_CLOSE) {
                     throw new UnsupportedOperationException("File system is read-only: " + archivePath);
                 }
             }

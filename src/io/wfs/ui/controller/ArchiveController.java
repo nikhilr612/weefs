@@ -1,6 +1,5 @@
 package io.wfs.ui.controller;
 
-import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 import io.wfs.ui.util.UIUtils;
@@ -41,7 +40,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
     private final FileOperations fileOps;
     private final NfsFileOperations nfsFileOps;
     private Component parentComponent;
-    private NfsConnectionConfig currentNfsConfig;
 
     public ArchiveController(ArchiveModel model) {
         this.model = model;
@@ -325,18 +323,17 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void unmountNfs() {
-        if (currentNfsConfig == null && !model.isRemoteMounted()) {
+        if (!model.isRemoteMounted() && !model.isNfsMounted()) {
             return;
         }
 
         executeInBackground("Unmounting NFS...", () -> {
             try {
-                if (currentNfsConfig != null) {
-                    currentNfsConfig = null;
+                if (model.isRemoteMounted()) {
+                    model.closeArchive();
+                } else {
                     nfsFileOps.setConfig(null);
                     model.setNfsConfig(null);
-                } else {
-                    model.closeArchive();
                 }
                 model.fireTreeRefresh();
             } catch (Exception ex) {
@@ -360,12 +357,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
             Path destination = chooser.getSelectedFile().toPath();
             executeInBackground("Extracting file...", () -> {
                 try {
-                    boolean success;
-                    if (currentNfsConfig != null) {
-                        success = nfsFileOps.extractTo(currentNfsConfig, selected.getPath().toString(), destination);
-                    } else {
-                        success = fileOps.extractTo(selected.getPath(), destination);
-                    }
+                    boolean success = fileOps.extractTo(selected.getPath(), destination);
                     if (success) {
                         JOptionPane.showMessageDialog(parentComponent,
                                 "File extracted successfully",
@@ -380,13 +372,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
     }
 
     @Override
-    public NfsConnectionConfig getCurrentNfsConfig() {
-        return currentNfsConfig;
-    }
-
-    @Override
     public boolean isNfsMounted() {
-        return currentNfsConfig != null || model.isRemoteMounted();
+        return model.isRemoteMounted() || model.isNfsMounted();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
@@ -520,8 +507,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
     }
 
     private void clearNfsIfMounted() throws IOException {
-        if (currentNfsConfig != null || model.isNfsMounted()) {
-            currentNfsConfig = null;
+        if (model.isNfsMounted()) {
             nfsFileOps.setConfig(null);
             model.setNfsConfig(null);
         }

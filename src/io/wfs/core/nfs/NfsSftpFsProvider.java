@@ -1,5 +1,6 @@
 package io.wfs.core.nfs;
 
+import io.wfs.core.filesystem.FsEnvKeys;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
@@ -61,7 +62,7 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
             throw new IOException("Environment variable '" + parsed.authEnvVar() + "' is missing or empty");
         }
 
-        Object readOnlyValue = safeEnv.containsKey("readOnly") ? safeEnv.get("readOnly") : "false";
+        Object readOnlyValue = safeEnv.containsKey(FsEnvKeys.READ_ONLY) ? safeEnv.get(FsEnvKeys.READ_ONLY) : "false";
         boolean readOnly = Boolean.parseBoolean(String.valueOf(readOnlyValue));
 
         NfsSftpConfig config = new NfsSftpConfig(
