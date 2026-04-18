@@ -1,0 +1,454 @@
+@startuml bad-design-class-diagram
+title weefs — Bad Design Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam linetype ortho
+
+' ─────────────────────────────────────────
+'  CORE — Extractor
+' ─────────────────────────────────────────
+package "io.wfs.core.extractor" {
+
+  interface ArchiveFormat {
+    + supports(Path) : boolean
+    + extract(Path, Path) : void
+    + write(Path, Path) : void
+  }
+
+  class ArchiveFormats {
+    - {static} FORMATS : List<ArchiveFormat>
+    + {static} resolve(Path) : ArchiveFormat
+    + {static} extractToDirectory(Path, Path) : void
+    + {static} writeToArchive(Path, Path) : void
+  }
+
+  class ZipArchiveFormat {
+    + supports(Path) : boolean
+    + extract(Path, Path) : void
+    + write(Path, Path) : void
+  }
+
+  class TarArchiveFormat {
+    + supports(Path) : boolean
+    + extract(Path, Path) : void
+    + write(Path, Path) : void
+    ' BAD: supports() only handles ".tar", not ".tar.gz", ".tar.bz2" etc.
+  }
+
+  class ArchiveFormatDetector {
+    + {static} detect(Path) : String
+    ' BAD OCP: hardcoded if/endsWith chain for each format
+  }
+
+  class ArchiveFormatInfo {
+    - formatName : String
+    - extensions : List<String>
+    - compressionKey : String
+    + getFormatName() : String
+    + getExtensions() : List<String>
+    + getCompressionKey() : String
+  }
+
+  enum ArchiveContainerType {
+    ZIP
+    TAR
+    SINGLE_FILE
+  }
+
+  class ExtZipFsIO {
+    + {static} extractArchiveToDirectory(Path, Path) : void
+    + {static} writeDirectoryToArchive(Path, Path) : void
+    - {static} extractZip(Path, Path) : void
+    - {static} extractTar(Path, Path) : void
+    - {static} extractSingleFile(Path, Path) : void
+    - {static} writeDirectoryToZip(Path, Path) : void
+    - {static} writeDirectoryToTar(Path, Path) : void
+    - {static} writeSingleFile(Path, Path) : void
+    - {static} deleteRecursively(Path) : void
+    ' BAD DRY: deleteRecursively duplicated in NfsIO and FileOperations
+    ' BAD SRP: handles ZIP, TAR, single-file, and compression dispatch
+  }
+
+  package "compression" {
+    interface CompressionStrategy {
+      + wrap(InputStream) : InputStream
+      + wrap(OutputStream) : OutputStream
+    }
+
+    class CompressionStrategyFactory {
+      + {static} get(String) : CompressionStrategy
+      ' BAD OCP: switch on string key — new compressions require editing
+    }
+
+    class GzipCompressionStrategy
+    class Bzip2CompressionStrategy
+    class XzCompressionStrategy
+    class LzmaCompressionStrategy
+    class NoCompressionStrategy
+  }
+}
+
+' ─────────────────────────────────────────
+'  CORE — ExtZip FileSystem
+' ─────────────────────────────────────────
+package "io.wfs.core.extzip" {
+
+  class ExtZipFsProvider {
+    - tempRoots : Map<URI, Path>
+    + newFileSystem(URI, Map) : FileSystem
+    + getFileSystem(URI) : FileSystem
+    + getPath(URI) : Path
+    + newByteChannel(Path, Set) : SeekableByteChannel
+    + newDirectoryStream(Path, Filter) : DirectoryStream
+    + createDirectory(Path) : void
+    + delete(Path) : void
+    + copy(Path, Path) : void
+    + move(Path, Path) : void
+    ' BAD DIP: directly used by ArchiveModel (concrete class, not interface)
+  }
+
+  class ExtZipFileSystem {
+    - provider : ExtZipFsProvider
+    - tempRoot : Path
+    - archivePath : Path
+    - readOnly : boolean
+    + getRootDirectories() : Iterable<Path>
+    + getPath(String, String[]) : Path
+    + close() : void
+  }
+
+  class ExtZipPath {
+    - fileSystem : ExtZipFileSystem
+    - pathString : String
+    + hashCode() : int
+    ' BAD: hashCode() uses System.identityHashCode(fileSystem) — unstable
+    ' BAD: isAbsolute() always returns true
+  }
+
+  class ExtZipDirectoryStream
+  class ExtZipDirectoryIterator
+  class ExtZipPathIterator
+  class ExtZipParsedUri {
+    - archiveUri : URI
+    - internalPath : String
+  }
+}
+
+' ─────────────────────────────────────────
+'  CORE — NFS
+' ─────────────────────────────────────────
+package "io.wfs.core.nfs" {
+
+  class NfsFsProvider {
+    - mounted : ConcurrentHashMap<String, NfsFileSystem>
+    + newFileSystem(URI, Map) : FileSystem
+    + getFileSystem(URI) : FileSystem
+    ' BAD: removed no-op catch(IOException){throw ex} redundancy
+  }
+
+  class NfsFileSystem {
+    - provider : NfsFsProvider
+    - config : NfsConnectionConfig
+    + getPath(String, String[]) : Path
+    + getRootDirectories() : Iterable<Path>
+    + close() : void
+  }
+
+  class NfsPath {
+    - fileSystem : NfsFileSystem
+    - pathString : String
+    + startsWith(Path) : boolean
+    ' BAD LSP: startsWith() does naive string prefix — false positives
+    + relativize(Path) : Path
+    ' BAD LSP: relativize() throws UnsupportedOperationException
+    + toUri() : URI
+    ' BAD LSP: toUri() throws UnsupportedOperationException
+    + toFile() : File
+    ' BAD LSP: toFile() throws UnsupportedOperationException
+  }
+
+  class NfsConnectionConfig {
+    - host : String
+    - port : int
+    - exportPath : String
+    - remotePath : String
+    - readOnly : boolean
+    + getHost() : String
+    + getPort() : int
+    + getExportPath() : String
+    + isReadOnly() : boolean
+  }
+
+  class NfsIO {
+    + {static} readFile(NfsConnectionConfig, String) : byte[]
+    + {static} writeFile(NfsConnectionConfig, String, byte[]) : void
+    + {static} listDirectory(NfsConnectionConfig, String) : List<NfsFileInfo>
+    + {static} deleteFile(NfsConnectionConfig, String) : void
+    + {static} deleteRecursively(NfsConnectionConfig, String) : void
+    ' BAD DRY: deleteRecursively duplicated in ExtZipFsIO and FileOperations
+  }
+
+  class NfsFileInfo {
+    - name : String
+    - size : long
+    - isDirectory : boolean
+    - lastModified : long
+  }
+}
+
+' ─────────────────────────────────────────
+'  UI — Model
+' ─────────────────────────────────────────
+package "io.wfs.ui.model" {
+
+  class ArchiveModel {
+    - provider : ExtZipFsProvider
+    ' BAD DIP: directly depends on concrete ExtZipFsProvider
+    - fileSystem : ExtZipFileSystem
+    - nfsConfig : NfsConnectionConfig
+    - readOnly : boolean
+    - archivePath : Path
+    - selectedFile : FileNode
+    - pcs : PropertyChangeSupport
+    + openArchive(Path, boolean) : void
+    + closeArchive() : void
+    + setNfsConfig(NfsConnectionConfig) : void
+    ' BAD SRP: manages both archive and NFS state in one model
+    + getNfsConfig() : NfsConnectionConfig
+    + listChildren(FileNode) : List<FileNode>
+    + setSelectedFile(FileNode) : void
+    + addPropertyChangeListener(PropertyChangeListener) : void
+    + fireTreeRefresh() : void
+  }
+
+  class FileNode {
+    - path : Path
+    - displayName : String
+    - directory : boolean
+    - size : long
+    + getPath() : Path
+    + isDirectory() : boolean
+    + getSize() : long
+    + getDisplayName() : String
+  }
+}
+
+' ─────────────────────────────────────────
+'  UI — Controller
+' ─────────────────────────────────────────
+package "io.wfs.ui.controller" {
+
+  interface IArchiveController {
+    + openArchive() : void
+    + closeArchive() : void
+    + createArchive() : void
+    + newFile() : void
+    + newDirectory() : void
+    + deleteSelected() : void
+    + renameSelected() : void
+    + extractSelected() : void
+    + importFile() : void
+    + showProperties() : void
+    + refresh() : void
+  }
+
+  interface INfsController {
+    + mountNfs() : void
+    + unmountNfs() : void
+    + extractNfsSelected() : void
+    + isNfsMounted() : boolean
+  }
+
+  class ArchiveController {
+    - model : ArchiveModel
+    - view : MainFrame
+    - fileOps : FileOperations
+    - nfsFileOps : NfsFileOperations
+    - currentNfsConfig : NfsConnectionConfig
+    ' BAD SRP: god class — 502 lines, handles archive, NFS, file ops,
+    '          dialogs, and background workers
+    ' BAD DIP: directly instantiates FileOperations and NfsFileOperations
+    ' BAD: currentNfsConfig duplicates model.getNfsConfig() — state drift
+    + openArchive() : void
+    + closeArchive() : void
+    + createArchive() : void
+    + newFile() : void
+    + newDirectory() : void
+    + deleteSelected() : void
+    + renameSelected() : void
+    + extractSelected() : void
+    + importFile() : void
+    + mountNfs() : void
+    + unmountNfs() : void
+    + extractNfsSelected() : void
+    + isNfsMounted() : boolean
+    - executeInBackground(String, Callable) : void
+  }
+
+  class FileOperations {
+    + newFile(Path) : boolean
+    + newDirectory(Path) : boolean
+    + deleteFile(Path) : boolean
+    + deleteRecursive(Path) : boolean
+    ' BAD DRY: deleteRecursive duplicated in ExtZipFsIO and NfsIO
+    + renameFile(Path, String) : boolean
+    + extractFile(Path, Path) : boolean
+    + importFile(Path, Path) : boolean
+    - showError(String) : void
+    ' BAD DRY: showError duplicated in NfsFileOperations
+  }
+
+  class NfsFileOperations {
+    + newFile(NfsConnectionConfig, String) : boolean
+    + newDirectory(NfsConnectionConfig, String) : boolean
+    + deleteFile(NfsConnectionConfig, String) : boolean
+    ' BAD DRY: read-only guard repeated in every method
+    + renameFile(NfsConnectionConfig, String, String) : boolean
+    + extractTo(NfsConnectionConfig, String, Path) : boolean
+    - showError(String) : void
+    ' BAD DRY: showError duplicated in FileOperations
+  }
+}
+
+' ─────────────────────────────────────────
+'  UI — View
+' ─────────────────────────────────────────
+package "io.wfs.ui.view" {
+
+  class MainFrame {
+    - model : ArchiveModel
+    - treePanel : ArchiveTreePanel
+    - contentPanel : FileContentPanel
+    - menuBar : JMenuBar
+    - toolBar : JToolBar
+    - statusBar : StatusBarPanel
+    + setController(IArchiveController) : void
+  }
+
+  class ArchiveTreePanel {
+    - model : ArchiveModel
+    - tree : JTree
+    + loadChildrenIfNeeded(FileNode) : void
+    ' BAD: uses "Loading..." magic string as placeholder marker
+    ' BAD Feature Envy: accesses model.getNfsConfig() for display logic
+  }
+
+  class FileContentPanel {
+    - model : ArchiveModel
+    + displayFile(FileNode) : void
+  }
+
+  class MenuBarFactory {
+    + {static} create(IArchiveController, ArchiveModel) : JMenuBar
+    ' BAD: createNfsMenu() hard-casts IArchiveController to INfsController
+  }
+
+  class ToolBarFactory {
+    + {static} create(IArchiveController, ArchiveModel) : JToolBar
+    ' BAD: hard-casts IArchiveController to INfsController
+  }
+
+  class StatusBarPanel {
+    - model : ArchiveModel
+    + update(String) : void
+  }
+
+  class FileTreeCellRenderer
+  class IconFactory {
+    + {static} archiveIcon() : Icon
+    + {static} folderIcon() : Icon
+    + {static} textFileIcon() : Icon
+  }
+  class FileTypeDetector {
+    ' BAD OCP: hardcoded extension sets
+  }
+  class SwingUtils {
+    + {static} runOnEdt(Runnable) : void
+  }
+
+  package "dialog" {
+    class NfsConnectionDialog
+    class AboutDialog
+    class PropertiesDialog
+  }
+}
+
+' ─────────────────────────────────────────
+'  UI — Main / App
+' ─────────────────────────────────────────
+package "io.wfs.main" {
+
+  class WeeFsApp {
+    - {static} instance : WeeFsApp
+    ' BAD Singleton: not volatile, makes testing hard
+    + {static} getInstance() : WeeFsApp
+    + launch() : void
+  }
+
+  class MainLauncher {
+    + {static} main(String[]) : void
+  }
+
+  class App {
+    + {static} main(String[]) : void
+  }
+}
+
+' ─────────────────────────────────────────
+'  Relationships
+' ─────────────────────────────────────────
+ArchiveFormats o-- ArchiveFormat
+ZipArchiveFormat ..|> ArchiveFormat
+TarArchiveFormat ..|> ArchiveFormat
+ArchiveFormats ..> ArchiveFormatDetector
+ExtZipFsIO ..> ArchiveFormatDetector
+ExtZipFsIO ..> CompressionStrategyFactory
+CompressionStrategyFactory ..> CompressionStrategy
+GzipCompressionStrategy ..|> CompressionStrategy
+Bzip2CompressionStrategy ..|> CompressionStrategy
+XzCompressionStrategy ..|> CompressionStrategy
+LzmaCompressionStrategy ..|> CompressionStrategy
+NoCompressionStrategy ..|> CompressionStrategy
+
+ExtZipFsProvider --> ExtZipFileSystem : creates
+ExtZipFileSystem --> ExtZipPath : creates
+ExtZipFileSystem --> ExtZipFsProvider
+ExtZipPath --> ExtZipFileSystem
+ExtZipFsProvider ..> ExtZipFsIO
+
+NfsFsProvider --> NfsFileSystem : creates
+NfsFileSystem --> NfsPath : creates
+NfsPath --> NfsFileSystem
+NfsFsProvider ..> NfsIO
+
+ArchiveModel --> ExtZipFsProvider : uses (BAD: concrete)
+ArchiveModel --> NfsConnectionConfig : holds
+ArchiveModel --> FileNode
+
+ArchiveController ..|> IArchiveController
+ArchiveController ..|> INfsController
+ArchiveController --> ArchiveModel
+ArchiveController --> MainFrame
+ArchiveController --> FileOperations : instantiates (BAD: DIP)
+ArchiveController --> NfsFileOperations : instantiates (BAD: DIP)
+ArchiveController --> NfsConnectionConfig : duplicates model state
+
+MenuBarFactory ..> IArchiveController
+MenuBarFactory ..> INfsController : casts to (BAD)
+ToolBarFactory ..> IArchiveController
+ToolBarFactory ..> INfsController : casts to (BAD)
+
+MainFrame --> ArchiveTreePanel
+MainFrame --> FileContentPanel
+MainFrame --> StatusBarPanel
+MainFrame --> ArchiveModel
+ArchiveTreePanel --> ArchiveModel
+FileContentPanel --> ArchiveModel
+StatusBarPanel --> ArchiveModel
+
+WeeFsApp --> MainFrame
+MainLauncher --> WeeFsApp
+App --> MainLauncher
+
+@enduml
