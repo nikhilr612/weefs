@@ -1,7 +1,6 @@
 package io.wfs.ui.view;
 
 import io.wfs.ui.controller.IArchiveController;
-import io.wfs.ui.controller.INfsController;
 import io.wfs.ui.model.ArchiveModel;
 
 import javax.swing.*;
@@ -12,7 +11,6 @@ import java.awt.event.KeyEvent;
 /**
  * Factory for creating the application menu bar.
  * Uses the Factory pattern to centralize menu construction.
- * Supports both archive and NFS operations.
  */
 public final class MenuBarFactory {
 
@@ -23,7 +21,6 @@ public final class MenuBarFactory {
         JMenuBar menuBar = new JMenuBar();
 
         menuBar.add(createFileMenu(controller, model));
-        menuBar.add(createNfsMenu(controller, model));
         menuBar.add(createEditMenu(controller, model));
         menuBar.add(createViewMenu(model));
         menuBar.add(createHelpMenu(controller));
@@ -44,44 +41,19 @@ public final class MenuBarFactory {
         open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
         open.addActionListener(e -> controller.openArchive());
 
-        JMenuItem mountNfs = new JMenuItem("Mount NFS...");
-        mountNfs.setAccelerator(
-            KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
-        mountNfs.addActionListener(e -> controller.mountNfs());
-
         JMenuItem close = new JMenuItem("Close Archive");
         close.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
         close.addActionListener(e -> controller.closeArchive());
 
         JMenuItem save = new JMenuItem("Save Archive");
-        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         save.addActionListener(e -> controller.saveArchive());
 
         JMenuItem exit = new JMenuItem("Exit");
         exit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
         exit.addActionListener(e -> {
-            if (model.isOpen() && !model.isReadOnly()) {
-                java.awt.Window[] windows = java.awt.Window.getWindows();
-                java.awt.Component parent = null;
-                for (java.awt.Window w : windows) {
-                    if (w instanceof JFrame) {
-                        parent = w;
-                        break;
-                    }
-                }
-                int choice = JOptionPane.showConfirmDialog(parent,
-                        "Save changes before exiting?",
-                        "Unsaved Changes",
-                        JOptionPane.YES_NO_CANCEL_OPTION,
-                        JOptionPane.QUESTION_MESSAGE);
-                if (choice == JOptionPane.CANCEL_OPTION) {
-                    return;
-                }
-            }
             try {
-                if (model.isOpen()) {
-                    model.closeArchive();
-                }
+                model.closeArchive();
             } catch (Exception ignored) {
             }
             System.exit(0);
@@ -89,7 +61,6 @@ public final class MenuBarFactory {
 
         menu.add(newArchive);
         menu.add(open);
-        menu.add(mountNfs);
         menu.addSeparator();
         menu.add(close);
         menu.add(save);
@@ -106,49 +77,6 @@ public final class MenuBarFactory {
         });
         close.setEnabled(false);
         save.setEnabled(false);
-
-        return menu;
-    }
-
-    private static JMenu createNfsMenu(IArchiveController controller, ArchiveModel model) {
-        JMenu menu = new JMenu("NFS");
-        menu.setMnemonic(KeyEvent.VK_N);
-
-        INfsController nfsController = (INfsController) controller;
-
-        JMenuItem mountNfs = new JMenuItem("Mount NFS...");
-        mountNfs.setAccelerator(
-                KeyStroke.getKeyStroke(KeyEvent.VK_M, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
-        mountNfs.addActionListener(e -> nfsController.mountNfs());
-
-        JMenuItem unmountNfs = new JMenuItem("Unmount NFS");
-        unmountNfs.setAccelerator(
-                KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
-        unmountNfs.addActionListener(e -> nfsController.unmountNfs());
-        unmountNfs.setEnabled(false);
-
-        JMenuItem extractNfs = new JMenuItem("Extract NFS File...");
-        extractNfs.addActionListener(e -> nfsController.extractNfsSelected());
-        extractNfs.setEnabled(false);
-
-        menu.add(mountNfs);
-        menu.add(unmountNfs);
-        menu.addSeparator();
-        menu.add(extractNfs);
-
-        // Update enablement based on NFS mount state
-        model.addPropertyChangeListener(ArchiveModel.PROP_NFS_CONFIG, evt -> {
-            boolean isMounted = nfsController.isNfsMounted();
-            unmountNfs.setEnabled(isMounted);
-            extractNfs
-                    .setEnabled(isMounted && model.getSelectedFile() != null && !model.getSelectedFile().isDirectory());
-        });
-
-        model.addPropertyChangeListener(ArchiveModel.PROP_SELECTED_FILE, evt -> {
-            boolean canExtract = nfsController.isNfsMounted() && model.getSelectedFile() != null
-                    && !model.getSelectedFile().isDirectory();
-            extractNfs.setEnabled(canExtract);
-        });
 
         return menu;
     }

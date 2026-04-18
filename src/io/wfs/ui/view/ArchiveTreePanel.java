@@ -115,13 +115,6 @@ public final class ArchiveTreePanel extends JPanel {
                         clearTree();
                     }
                 }
-                case ArchiveModel.PROP_NFS_CONFIG -> {
-                    if (evt.getNewValue() != null) {
-                        rebuildTree();
-                    } else {
-                        clearTree();
-                    }
-                }
                 case ArchiveModel.PROP_TREE_REFRESH -> rebuildTree();
             }
         });
@@ -129,22 +122,6 @@ public final class ArchiveTreePanel extends JPanel {
 
     private void rebuildTree() {
         rootNode.removeAllChildren();
-
-        // Handle NFS case
-        if (model.isNfsMounted()) {
-            io.wfs.core.nfs.NfsConnectionConfig config = model.getNfsConfig();
-            String label = config.getHost() + ":" + config.getPort() + config.getExportPath();
-            if (model.isReadOnly()) {
-                label += " [Read Only]";
-            }
-            rootNode.setUserObject(label);
-            loadChildren(rootNode, Path.of("/"));
-            treeModel.reload();
-            tree.expandRow(0);
-            return;
-        }
-
-        // Handle Archive case
         Path root = model.getRootPath();
         if (root == null) {
             rootNode.setUserObject("(No archive open)");
