@@ -31,6 +31,7 @@ public final class ArchiveModel {
     public static final String PROP_NFS_CONFIG = "nfsConfig";
     public static final String PROP_OPEN = "open";
     public static final String PROP_READ_ONLY = "readOnly";
+    public static final String PROP_REMOTE_MOUNTED = "remoteMounted";
     public static final String PROP_SELECTED_FILE = "selectedFile";
     public static final String PROP_TREE_REFRESH = "treeRefresh";
 
@@ -40,6 +41,7 @@ public final class ArchiveModel {
     private Path archivePath;
     private NfsConnectionConfig nfsConfig;
     private FileSystem fileSystem;
+    private boolean remoteMounted;
     private boolean readOnly;
     private FileNode selectedFile;
 
@@ -84,6 +86,9 @@ public final class ArchiveModel {
         this.archivePath = displayPath;
         this.nfsConfig = null;
 
+        boolean newRemoteMounted = "weefs".equalsIgnoreCase(uri.getScheme());
+        this.remoteMounted = newRemoteMounted;
+
         Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
         this.fileSystem = fileSystemFactory.open(uri, env);
 
@@ -92,8 +97,11 @@ public final class ArchiveModel {
         fireOnEdt(() -> {
             pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, displayPath);
             pcs.firePropertyChange(PROP_OPEN, false, true);
-            if (previousReadOnly != readOnly) {
+            if (finalPreviousReadOnly != readOnly) {
                 pcs.firePropertyChange(PROP_READ_ONLY, finalPreviousReadOnly, readOnly);
+            }
+            if (newRemoteMounted) {
+                pcs.firePropertyChange(PROP_REMOTE_MOUNTED, false, true);
             }
         });
     }
@@ -116,11 +124,13 @@ public final class ArchiveModel {
      */
     public void closeArchive() throws IOException {
         boolean wasOpen = isOpen();
+        boolean wasRemoteMounted = this.remoteMounted;
         if (fileSystem != null && fileSystem.isOpen()) {
             fileSystem.close();
         }
         fileSystem = null;
         nfsConfig = null;
+        remoteMounted = false;
         Path oldPath = archivePath;
         archivePath = null;
         selectedFile = null;
@@ -129,6 +139,9 @@ public final class ArchiveModel {
                 pcs.firePropertyChange(PROP_OPEN, true, false);
                 if (oldPath != null) {
                     pcs.firePropertyChange(PROP_ARCHIVE_PATH, oldPath, null);
+                }
+                if (wasRemoteMounted) {
+                    pcs.firePropertyChange(PROP_REMOTE_MOUNTED, true, false);
                 }
             });
         }
@@ -182,6 +195,10 @@ public final class ArchiveModel {
 
     public boolean isNfsMounted() {
         return nfsConfig != null;
+    }
+
+    public boolean isRemoteMounted() {
+        return remoteMounted;
     }
 
     /**

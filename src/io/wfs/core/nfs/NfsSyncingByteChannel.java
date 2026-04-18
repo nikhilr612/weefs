@@ -15,7 +15,7 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
     private final boolean writable;
     private byte[] buffer;
     private int size;
-    private int position;
+    private long position;
     private boolean dirty;
     private boolean open = true;
 
@@ -40,8 +40,8 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
         if (position >= size) {
             return -1;
         }
-        int count = Math.min(dst.remaining(), size - position);
-        dst.put(buffer, position, count);
+        int count = Math.min(dst.remaining(), size - (int) position);
+        dst.put(buffer, (int) position, count);
         position += count;
         return count;
     }
@@ -54,11 +54,15 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
         }
 
         int count = src.remaining();
-        ensureCapacity(position + count);
-        src.get(buffer, position, count);
+        long newEnd = position + count;
+        if (newEnd > Integer.MAX_VALUE) {
+            throw new IOException("Write would overflow maximum channel size");
+        }
+        ensureCapacity((int) newEnd);
+        src.get(buffer, (int) position, count);
         position += count;
         if (position > size) {
-            size = position;
+            size = (int) position;
         }
         dirty = true;
         return count;
@@ -76,7 +80,7 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
         if (newPosition < 0 || newPosition > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Invalid channel position: " + newPosition);
         }
-        position = (int) newPosition;
+        position = newPosition;
         return this;
     }
 
@@ -99,7 +103,7 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
         if (newSize < this.size) {
             this.size = newSize;
             if (position > this.size) {
-                position = this.size;
+            position = this.size;
             }
             dirty = true;
         }

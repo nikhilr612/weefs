@@ -143,12 +143,16 @@ public final class MenuBarFactory {
         menu.add(extractNfs);
 
         // Update enablement based on NFS mount state
-        model.addPropertyChangeListener(ArchiveModel.PROP_NFS_CONFIG, evt -> {
+        Runnable updateNfsItems = () -> {
             boolean isMounted = nfsController.isNfsMounted();
             unmountNfs.setEnabled(isMounted);
-            extractNfs
-                    .setEnabled(isMounted && model.getSelectedFile() != null && !model.getSelectedFile().isDirectory());
-        });
+            extractNfs.setEnabled(isMounted && model.getSelectedFile() != null
+                    && !model.getSelectedFile().isDirectory());
+        };
+        model.addPropertyChangeListener(ArchiveModel.PROP_NFS_CONFIG, evt ->
+                SwingUtilities.invokeLater(updateNfsItems));
+        model.addPropertyChangeListener(ArchiveModel.PROP_REMOTE_MOUNTED, evt ->
+                SwingUtilities.invokeLater(updateNfsItems));
 
         model.addPropertyChangeListener(ArchiveModel.PROP_SELECTED_FILE, evt -> {
             boolean canExtract = nfsController.isNfsMounted() && model.getSelectedFile() != null

@@ -223,7 +223,7 @@ final class NfsPath implements Path {
 
     @Override
     public int hashCode() {
-        return Objects.hash(System.identityHashCode(fileSystem), virtualPath);
+        return Objects.hash(System.identityHashCode(fileSystem), delegate);
     }
 
     private static String normalizeVirtualPath(String raw) {

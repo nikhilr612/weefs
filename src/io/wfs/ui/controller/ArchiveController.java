@@ -324,15 +324,19 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void unmountNfs() {
-        if (currentNfsConfig == null) {
+        if (currentNfsConfig == null && !model.isRemoteMounted()) {
             return;
         }
 
         executeInBackground("Unmounting NFS...", () -> {
             try {
-                currentNfsConfig = null;
-                nfsFileOps.setConfig(null);
-                model.setNfsConfig(null);
+                if (currentNfsConfig != null) {
+                    currentNfsConfig = null;
+                    nfsFileOps.setConfig(null);
+                    model.setNfsConfig(null);
+                } else {
+                    model.closeArchive();
+                }
                 model.fireTreeRefresh();
             } catch (Exception ex) {
                 showError("Unmount NFS", ex);
@@ -355,11 +359,18 @@ public final class ArchiveController implements IArchiveController, INfsControll
             Path destination = chooser.getSelectedFile().toPath();
             executeInBackground("Extracting file...", () -> {
                 try {
-                    nfsFileOps.extractTo(currentNfsConfig, selected.getPath().toString(), destination);
-                    JOptionPane.showMessageDialog(parentComponent,
-                            "File extracted successfully",
-                            "Success",
-                            JOptionPane.INFORMATION_MESSAGE);
+                    boolean success;
+                    if (currentNfsConfig != null) {
+                        success = nfsFileOps.extractTo(currentNfsConfig, selected.getPath().toString(), destination);
+                    } else {
+                        success = fileOps.extractTo(selected.getPath(), destination);
+                    }
+                    if (success) {
+                        JOptionPane.showMessageDialog(parentComponent,
+                                "File extracted successfully",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    }
                 } catch (Exception ex) {
                     showError("Extract NFS File", ex);
                 }
@@ -374,7 +385,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public boolean isNfsMounted() {
-        return currentNfsConfig != null;
+        return currentNfsConfig != null || model.isRemoteMounted();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
