@@ -30,7 +30,7 @@ public final class AboutDialog extends JDialog {
 
         JLabel desc = new JLabel("<html><center>A Java NIO FileSystem-backed<br>"
                 + "archive browser and editor.<br><br>"
-                + "Supports ZIP and TAR archives.</center></html>");
+            + "Supports ZIP, TAR, TAR.GZ, TAR.BZ2, GZ, BZ2, XZ, and LZMA archives.</center></html>");
         desc.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel license = new JLabel("MIT License");
