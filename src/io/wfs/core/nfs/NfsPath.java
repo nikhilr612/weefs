@@ -15,19 +15,21 @@ import java.util.Objects;
 final class NfsPath implements Path {
 
     private final NfsFileSystem fileSystem;
+    private final String virtualPath;
     private final Path delegate;
 
-    NfsPath(NfsFileSystem fileSystem, Path delegate) {
+    NfsPath(NfsFileSystem fileSystem, String virtualPath) {
         this.fileSystem = fileSystem;
-        this.delegate = delegate.normalize();
+        this.virtualPath = normalizeVirtualPath(virtualPath);
+        this.delegate = Path.of(this.virtualPath);
     }
 
     NfsFileSystem getNfsFileSystem() {
         return fileSystem;
     }
 
-    Path getDelegate() {
-        return delegate;
+    String virtualPath() {
+        return virtualPath;
     }
 
     private NfsPath requireSameProvider(Path path) {
@@ -41,18 +43,8 @@ final class NfsPath implements Path {
         return other;
     }
 
-    private boolean isUnderTempRoot() {
-        return delegate.isAbsolute() && delegate.startsWith(fileSystem.getTempRoot());
-    }
-
     private String toVirtualString() {
-        if (isUnderTempRoot()) {
-            Path relative = fileSystem.getTempRoot().relativize(delegate);
-            String value = relative.toString().replace(File.separatorChar, '/');
-            return value.isEmpty() ? "/" : "/" + value;
-        }
-        String value = delegate.toString().replace(File.separatorChar, '/');
-        return value.isEmpty() ? "/" : value;
+        return virtualPath;
     }
 
     @Override
@@ -62,12 +54,12 @@ final class NfsPath implements Path {
 
     @Override
     public boolean isAbsolute() {
-        return true;
+        return delegate.isAbsolute();
     }
 
     @Override
     public Path getRoot() {
-        return new NfsPath(fileSystem, fileSystem.getTempRoot());
+        return new NfsPath(fileSystem, "/");
     }
 
     @Override
@@ -76,7 +68,7 @@ final class NfsPath implements Path {
         if (fileName == null) {
             return null;
         }
-        return new NfsPath(fileSystem, fileName);
+        return new NfsPath(fileSystem, fileName.toString());
     }
 
     @Override
@@ -85,7 +77,7 @@ final class NfsPath implements Path {
         if (parent == null) {
             return null;
         }
-        return new NfsPath(fileSystem, parent);
+        return new NfsPath(fileSystem, parent.toString());
     }
 
     @Override
@@ -95,12 +87,12 @@ final class NfsPath implements Path {
 
     @Override
     public Path getName(int index) {
-        return new NfsPath(fileSystem, delegate.getName(index));
+        return new NfsPath(fileSystem, delegate.getName(index).toString());
     }
 
     @Override
     public Path subpath(int beginIndex, int endIndex) {
-        return new NfsPath(fileSystem, delegate.subpath(beginIndex, endIndex));
+        return new NfsPath(fileSystem, delegate.subpath(beginIndex, endIndex).toString());
     }
 
     @Override
@@ -127,35 +119,35 @@ final class NfsPath implements Path {
 
     @Override
     public Path normalize() {
-        return new NfsPath(fileSystem, delegate.normalize());
+        return new NfsPath(fileSystem, delegate.normalize().toString());
     }
 
     @Override
     public Path resolve(Path other) {
         NfsPath ext = requireSameProvider(other);
-        return new NfsPath(fileSystem, delegate.resolve(ext.delegate));
+        return new NfsPath(fileSystem, delegate.resolve(ext.delegate).toString());
     }
 
     @Override
     public Path resolve(String other) {
-        return new NfsPath(fileSystem, delegate.resolve(other));
+        return new NfsPath(fileSystem, delegate.resolve(other).toString());
     }
 
     @Override
     public Path resolveSibling(Path other) {
         NfsPath ext = requireSameProvider(other);
-        return new NfsPath(fileSystem, delegate.resolveSibling(ext.delegate));
+        return new NfsPath(fileSystem, delegate.resolveSibling(ext.delegate).toString());
     }
 
     @Override
     public Path resolveSibling(String other) {
-        return new NfsPath(fileSystem, delegate.resolveSibling(other));
+        return new NfsPath(fileSystem, delegate.resolveSibling(other).toString());
     }
 
     @Override
     public Path relativize(Path other) {
         NfsPath ext = requireSameProvider(other);
-        return new NfsPath(fileSystem, delegate.relativize(ext.delegate));
+        return new NfsPath(fileSystem, delegate.relativize(ext.delegate).toString());
     }
 
     @Override
@@ -163,33 +155,34 @@ final class NfsPath implements Path {
         NfsSftpConfig cfg = fileSystem.config();
         String internal = toVirtualString();
         String uriPath = cfg.remoteRoot();
+        String authority = cfg.username() + "@" + cfg.host();
         if ("/".equals(internal)) {
-            return URI.create("weefs://" + cfg.host() + uriPath + "?auth=" + cfg.authEnvVar());
+            return URI.create("weefs://" + authority + uriPath + "?auth=" + cfg.authEnvVar());
         }
         String suffix = internal.startsWith("/") ? internal.substring(1) : internal;
         String joined = uriPath.endsWith("/") ? uriPath + suffix : uriPath + "/" + suffix;
-        return URI.create("weefs://" + cfg.host() + joined + "?auth=" + cfg.authEnvVar());
+        return URI.create("weefs://" + authority + joined + "?auth=" + cfg.authEnvVar());
     }
 
     @Override
     public Path toAbsolutePath() {
-        return new NfsPath(fileSystem, delegate.toAbsolutePath());
+        return isAbsolute() ? this : new NfsPath(fileSystem, "/" + virtualPath);
     }
 
     @Override
     public Path toRealPath(LinkOption... options) throws IOException {
-        return new NfsPath(fileSystem, delegate.toRealPath(options));
+        return toAbsolutePath();
     }
 
     @Override
     public File toFile() {
-        return delegate.toFile();
+        throw new UnsupportedOperationException("NFS paths do not map to local files");
     }
 
     @Override
     public WatchKey register(WatchService watcher, WatchEvent.Kind<?>[] events, WatchEvent.Modifier... modifiers)
             throws IOException {
-        return delegate.register(watcher, events, modifiers);
+        throw new UnsupportedOperationException("Watch service is not supported for weefs SFTP");
     }
 
     @Override
@@ -223,6 +216,15 @@ final class NfsPath implements Path {
 
     @Override
     public int hashCode() {
-        return Objects.hash(System.identityHashCode(fileSystem), delegate);
+        return Objects.hash(System.identityHashCode(fileSystem), virtualPath);
+    }
+
+    private static String normalizeVirtualPath(String raw) {
+        String value = raw == null || raw.isBlank() ? "/" : raw.replace('\\', '/').trim();
+        if (!value.startsWith("/")) {
+            value = "/" + value;
+        }
+        value = NfsSftpFsIO.normalizeRemotePath(value);
+        return value.isBlank() ? "/" : value;
     }
 }

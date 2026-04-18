@@ -10,14 +10,12 @@ import java.util.NoSuchElementException;
 final class NfsDirectoryIterator implements Iterator<Path> {
 
     private final Iterator<Path> delegate;
-    private final NfsFileSystem fileSystem;
     private final DirectoryStream.Filter<? super Path> filter;
     private Path next;
     private boolean prepared;
 
-    NfsDirectoryIterator(Iterator<Path> delegate, NfsFileSystem fileSystem, DirectoryStream.Filter<? super Path> filter) {
+    NfsDirectoryIterator(Iterator<Path> delegate, DirectoryStream.Filter<? super Path> filter) {
         this.delegate = delegate;
-        this.fileSystem = fileSystem;
         this.filter = filter;
     }
 
@@ -29,7 +27,7 @@ final class NfsDirectoryIterator implements Iterator<Path> {
 
         prepared = true;
         while (delegate.hasNext()) {
-            Path candidate = fileSystem.wrap(delegate.next());
+            Path candidate = delegate.next();
             try {
                 if (filter.accept(candidate)) {
                     next = candidate;

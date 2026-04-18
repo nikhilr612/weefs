@@ -5,7 +5,6 @@ import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -20,15 +19,13 @@ final class NfsFileSystem extends FileSystem {
 
     private final NfsSftpFsProvider provider;
     private final NfsSftpConfig config;
-    private final Path tempRoot;
     private final boolean readOnly;
     private final AtomicBoolean open;
     private volatile Thread shutdownHook;
 
-    NfsFileSystem(NfsSftpFsProvider provider, NfsSftpConfig config, Path tempRoot, boolean readOnly) {
+    NfsFileSystem(NfsSftpFsProvider provider, NfsSftpConfig config, boolean readOnly) {
         this.provider = provider;
         this.config = config;
-        this.tempRoot = tempRoot;
         this.readOnly = readOnly;
         this.open = new AtomicBoolean(true);
     }
@@ -46,12 +43,13 @@ final class NfsFileSystem extends FileSystem {
         return config;
     }
 
-    Path getTempRoot() {
-        return tempRoot;
-    }
-
-    NfsPath wrap(Path delegate) {
-        return new NfsPath(this, delegate);
+    String toRemotePath(NfsPath path) {
+        String virtual = path.toString();
+        if ("/".equals(virtual)) {
+            return config.remoteRoot();
+        }
+        String suffix = virtual.startsWith("/") ? virtual.substring(1) : virtual;
+        return NfsSftpFsIO.join(config.remoteRoot(), suffix);
     }
 
     void ensureWritable() {
@@ -75,21 +73,6 @@ final class NfsFileSystem extends FileSystem {
         }
     }
 
-    void syncFile(Path localPath) throws IOException {
-        ensureOpen();
-        NfsSftpFsIO.uploadFile(config, tempRoot, localPath);
-    }
-
-    void createRemoteDirectory(Path localPath) throws IOException {
-        ensureOpen();
-        NfsSftpFsIO.createRemoteDirectory(config, tempRoot, localPath);
-    }
-
-    void deleteRemote(Path localPath, boolean wasDirectory) throws IOException {
-        ensureOpen();
-        NfsSftpFsIO.deleteRemotePath(config, tempRoot, localPath, wasDirectory);
-    }
-
     private void ensureOpen() {
         if (!isOpen()) {
             throw new FileSystemNotFoundException("File system is closed: " + config.host());
@@ -107,29 +90,6 @@ final class NfsFileSystem extends FileSystem {
             return;
         }
 
-        IOException failure = null;
-        try {
-            if (Files.exists(tempRoot)) {
-                try (var walk = Files.walk(tempRoot)) {
-                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ex) {
-                            throw new RuntimeException(ex);
-                        }
-                    });
-                }
-            }
-        } catch (RuntimeException ex) {
-            if (ex.getCause() instanceof IOException ioEx) {
-                failure = ioEx;
-            } else {
-                failure = new IOException("Failed to cleanup temporary files", ex);
-            }
-        } catch (IOException ex) {
-            failure = ex;
-        }
-
         provider.unregister(this);
 
         Thread hook = shutdownHook;
@@ -139,10 +99,6 @@ final class NfsFileSystem extends FileSystem {
             } catch (IllegalStateException ignored) {
                 // Shutdown in progress.
             }
-        }
-
-        if (failure != null) {
-            throw failure;
         }
     }
 
@@ -163,51 +119,45 @@ final class NfsFileSystem extends FileSystem {
 
     @Override
     public Iterable<Path> getRootDirectories() {
-        return List.of(new NfsPath(this, tempRoot));
+        return List.of(new NfsPath(this, "/"));
     }
 
     @Override
     public Iterable<FileStore> getFileStores() {
-        try {
-            return List.of(Files.getFileStore(tempRoot));
-        } catch (IOException ex) {
-            return List.of();
-        }
+        return List.of();
     }
 
     @Override
     public Set<String> supportedFileAttributeViews() {
-        return tempRoot.getFileSystem().supportedFileAttributeViews();
+        return Set.of("basic");
     }
 
     @Override
     public Path getPath(String first, String... more) {
-        Path relativePath = Path.of(first, more);
-        String relativeText = relativePath.toString().replace(java.io.File.separatorChar, '/');
-        String trimmed = relativeText.startsWith("/") ? relativeText.substring(1) : relativeText;
-        Path delegate = trimmed.isEmpty() ? tempRoot : tempRoot.resolve(trimmed).normalize();
-
-        if (!delegate.startsWith(tempRoot)) {
-            throw new IllegalArgumentException("Path escapes mounted root: " + relativeText);
+        String joined = Path.of(first, more).toString().replace('\\', '/');
+        if (joined.isBlank() || "/".equals(joined)) {
+            return new NfsPath(this, "/");
         }
 
-        return new NfsPath(this, delegate);
+        String normalized = joined.startsWith("/") ? joined : "/" + joined;
+        normalized = NfsSftpFsIO.normalizeRemotePath(normalized);
+        return new NfsPath(this, normalized);
     }
 
     @Override
     public PathMatcher getPathMatcher(String syntaxAndPattern) {
         PathMatcher matcher = FileSystems.getDefault().getPathMatcher(syntaxAndPattern);
-        return path -> matcher.matches(Path.of(path.toString()));
+        return path -> matcher.matches(Path.of(path.toString().replace('\\', '/')));
     }
 
     @Override
     public UserPrincipalLookupService getUserPrincipalLookupService() {
-        return tempRoot.getFileSystem().getUserPrincipalLookupService();
+        throw new UnsupportedOperationException("User principal lookup is not supported for weefs SFTP");
     }
 
     @Override
     public WatchService newWatchService() throws IOException {
-        return tempRoot.getFileSystem().newWatchService();
+        throw new UnsupportedOperationException("Watch service is not supported for weefs SFTP");
     }
 
     private void closeQuietly() {

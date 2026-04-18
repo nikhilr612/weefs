@@ -3,56 +3,112 @@ package io.wfs.core.nfs;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Path;
+import java.nio.channels.NonReadableChannelException;
+import java.nio.channels.NonWritableChannelException;
+import java.util.Arrays;
 
 final class NfsSyncingByteChannel implements SeekableByteChannel {
 
-    private final SeekableByteChannel delegate;
     private final NfsFileSystem fileSystem;
-    private final Path localPath;
+    private final NfsPath path;
+    private final boolean readable;
+    private final boolean writable;
+    private byte[] buffer;
+    private int size;
+    private int position;
+    private boolean dirty;
     private boolean open = true;
 
-    NfsSyncingByteChannel(SeekableByteChannel delegate, NfsFileSystem fileSystem, Path localPath) {
-        this.delegate = delegate;
+    NfsSyncingByteChannel(NfsFileSystem fileSystem, NfsPath path, boolean readable, boolean writable,
+            byte[] initialContent, boolean appendMode, boolean initiallyDirty) {
         this.fileSystem = fileSystem;
-        this.localPath = localPath;
+        this.path = path;
+        this.readable = readable;
+        this.writable = writable;
+        this.buffer = initialContent == null ? new byte[0] : Arrays.copyOf(initialContent, initialContent.length);
+        this.size = this.buffer.length;
+        this.position = appendMode ? this.size : 0;
+        this.dirty = initiallyDirty;
     }
 
     @Override
     public int read(ByteBuffer dst) throws IOException {
-        return delegate.read(dst);
+        ensureOpen();
+        if (!readable) {
+            throw new NonReadableChannelException();
+        }
+        if (position >= size) {
+            return -1;
+        }
+        int count = Math.min(dst.remaining(), size - position);
+        dst.put(buffer, position, count);
+        position += count;
+        return count;
     }
 
     @Override
     public int write(ByteBuffer src) throws IOException {
-        return delegate.write(src);
+        ensureOpen();
+        if (!writable) {
+            throw new NonWritableChannelException();
+        }
+
+        int count = src.remaining();
+        ensureCapacity(position + count);
+        src.get(buffer, position, count);
+        position += count;
+        if (position > size) {
+            size = position;
+        }
+        dirty = true;
+        return count;
     }
 
     @Override
     public long position() throws IOException {
-        return delegate.position();
+        ensureOpen();
+        return position;
     }
 
     @Override
     public SeekableByteChannel position(long newPosition) throws IOException {
-        delegate.position(newPosition);
+        ensureOpen();
+        if (newPosition < 0 || newPosition > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid channel position: " + newPosition);
+        }
+        position = (int) newPosition;
         return this;
     }
 
     @Override
     public long size() throws IOException {
-        return delegate.size();
+        ensureOpen();
+        return size;
     }
 
     @Override
     public SeekableByteChannel truncate(long size) throws IOException {
-        delegate.truncate(size);
+        ensureOpen();
+        if (!writable) {
+            throw new NonWritableChannelException();
+        }
+        if (size < 0 || size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid truncate size: " + size);
+        }
+        int newSize = (int) size;
+        if (newSize < this.size) {
+            this.size = newSize;
+            if (position > this.size) {
+                position = this.size;
+            }
+            dirty = true;
+        }
         return this;
     }
 
     @Override
     public boolean isOpen() {
-        return open && delegate.isOpen();
+        return open;
     }
 
     @Override
@@ -62,25 +118,24 @@ final class NfsSyncingByteChannel implements SeekableByteChannel {
         }
         open = false;
 
-        IOException failure = null;
-        try {
-            delegate.close();
-        } catch (IOException ex) {
-            failure = ex;
+        if (writable && dirty) {
+            fileSystem.ensureWritable();
+            byte[] payload = Arrays.copyOf(buffer, size);
+            NfsSftpFsIO.writeFile(fileSystem.config(), fileSystem.toRemotePath(path), payload, true);
         }
+    }
 
-        try {
-            fileSystem.syncFile(localPath);
-        } catch (IOException ex) {
-            if (failure == null) {
-                failure = ex;
-            } else {
-                failure.addSuppressed(ex);
-            }
+    private void ensureOpen() throws IOException {
+        if (!open) {
+            throw new IOException("Channel is closed");
         }
+    }
 
-        if (failure != null) {
-            throw failure;
+    private void ensureCapacity(int minCapacity) {
+        if (minCapacity <= buffer.length) {
+            return;
         }
+        int newCapacity = Math.max(minCapacity, Math.max(16, buffer.length * 2));
+        buffer = Arrays.copyOf(buffer, newCapacity);
     }
 }

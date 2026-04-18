@@ -1,27 +1,29 @@
 package io.wfs.core.nfs;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessMode;
 import java.nio.file.CopyOption;
-import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystemNotFoundException;
-import java.nio.file.Files;
 import java.nio.file.LinkOption;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.ProviderMismatchException;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.spi.FileSystemProvider;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -67,23 +69,16 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
                 parsed.remotePath(),
                 parsed.authEnvVar());
 
-        Path tempRoot = Files.createTempDirectory("weefs-sftp-");
-        try {
-            NfsSftpFsIO.downloadRemoteTree(config, tempRoot);
-            NfsFileSystem fs = new NfsFileSystem(this, config, tempRoot, readOnly);
+        NfsSftpFsIO.ensureMountRootExists(config);
+        NfsFileSystem fs = new NfsFileSystem(this, config, readOnly);
 
-            NfsFileSystem previous = mounted.putIfAbsent(key, fs);
-            if (previous != null) {
-                deleteRecursively(tempRoot);
-                throw new FileSystemAlreadyExistsException("Remote location already mounted: " + uri);
-            }
-
-            fs.installShutdownHook();
-            return fs;
-        } catch (IOException | RuntimeException ex) {
-            deleteRecursively(tempRoot);
-            throw ex;
+        NfsFileSystem previous = mounted.putIfAbsent(key, fs);
+        if (previous != null) {
+            throw new FileSystemAlreadyExistsException("Remote location already mounted: " + uri);
         }
+
+        fs.installShutdownHook();
+        return fs;
     }
 
     @Override
@@ -112,10 +107,6 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
             }
         }
 
-        String root = parsed.remotePath();
-        if (root == null || root.isBlank() || "/".equals(root)) {
-            return fs.getPath("/");
-        }
         return fs.getPath("/");
     }
 
@@ -123,190 +114,208 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs)
             throws IOException {
         NfsPath nfsPath = requireNfsPath(path);
-        nfsPath.getNfsFileSystem().ensureWritableFor(options);
+        NfsFileSystem fs = nfsPath.getNfsFileSystem();
+        Set<StandardOpenOption> resolved = resolveOpenOptions(options);
 
-        SeekableByteChannel channel = Files.newByteChannel(nfsPath.getDelegate(), options, attrs);
-        if (isWriteOperation(options)) {
-            return new NfsSyncingByteChannel(channel, nfsPath.getNfsFileSystem(), nfsPath.getDelegate());
+        boolean readable = resolved.contains(StandardOpenOption.READ);
+        boolean writable = resolved.contains(StandardOpenOption.WRITE) || resolved.contains(StandardOpenOption.APPEND);
+        boolean append = resolved.contains(StandardOpenOption.APPEND);
+        boolean truncate = resolved.contains(StandardOpenOption.TRUNCATE_EXISTING) && writable;
+        boolean create = resolved.contains(StandardOpenOption.CREATE);
+        boolean createNew = resolved.contains(StandardOpenOption.CREATE_NEW);
+
+        fs.ensureWritableFor(resolved);
+
+        String remotePath = fs.toRemotePath(nfsPath);
+        boolean exists = NfsSftpFsIO.exists(fs.config(), remotePath);
+
+        if (createNew && exists) {
+            throw new java.nio.file.FileAlreadyExistsException(nfsPath.toString());
         }
-        return channel;
+
+        if (!exists && !create && !createNew) {
+            throw new FileNotFoundException(nfsPath.toString());
+        }
+
+        byte[] initial = new byte[0];
+        boolean initialDirty = false;
+        if (exists) {
+            if (!truncate) {
+                NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(fs.config(), remotePath);
+                if (stat.directory()) {
+                    throw new IOException("Cannot open directory as file: " + nfsPath);
+                }
+                if (readable || writable || append) {
+                    initial = NfsSftpFsIO.readFile(fs.config(), remotePath);
+                }
+            } else {
+                initialDirty = true;
+            }
+        } else {
+            initialDirty = create || createNew;
+        }
+
+        return new NfsSyncingByteChannel(fs, nfsPath, readable, writable, initial, append, initialDirty);
     }
 
     @Override
     public DirectoryStream<Path> newDirectoryStream(Path dir, DirectoryStream.Filter<? super Path> filter)
             throws IOException {
         NfsPath nfsDir = requireNfsPath(dir);
-        DirectoryStream<Path> delegate = Files.newDirectoryStream(nfsDir.getDelegate());
+        NfsFileSystem fs = nfsDir.getNfsFileSystem();
+        String remoteDir = fs.toRemotePath(nfsDir);
+
+        List<NfsSftpFsIO.RemoteEntry> entries = NfsSftpFsIO.listDirectory(fs.config(), remoteDir);
+        List<Path> children = new ArrayList<>(entries.size());
+        for (NfsSftpFsIO.RemoteEntry entry : entries) {
+            children.add(fs.getPath(joinVirtual(nfsDir.toString(), entry.name())));
+        }
+
         DirectoryStream.Filter<? super Path> safeFilter = filter == null ? path -> true : filter;
-        return new NfsDirectoryStream(delegate, nfsDir.getNfsFileSystem(), safeFilter);
+        return new NfsDirectoryStream(children, safeFilter);
     }
 
     @Override
     public void createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException {
         NfsPath nfsDir = requireNfsPath(dir);
-        nfsDir.getNfsFileSystem().ensureWritable();
-        Files.createDirectory(nfsDir.getDelegate(), attrs);
-        nfsDir.getNfsFileSystem().createRemoteDirectory(nfsDir.getDelegate());
+        NfsFileSystem fs = nfsDir.getNfsFileSystem();
+        fs.ensureWritable();
+        NfsSftpFsIO.createDirectory(fs.config(), fs.toRemotePath(nfsDir));
     }
 
     @Override
     public void delete(Path path) throws IOException {
         NfsPath nfsPath = requireNfsPath(path);
-        nfsPath.getNfsFileSystem().ensureWritable();
+        NfsFileSystem fs = nfsPath.getNfsFileSystem();
+        fs.ensureWritable();
 
-        boolean isDirectory = Files.isDirectory(nfsPath.getDelegate());
-        if (isDirectory) {
-            try (var stream = Files.list(nfsPath.getDelegate())) {
-                if (stream.findAny().isPresent()) {
-                    throw new DirectoryNotEmptyException(nfsPath.toString());
-                }
-            }
+        String remotePath = fs.toRemotePath(nfsPath);
+        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(fs.config(), remotePath);
+        if (stat.directory()) {
+            NfsSftpFsIO.deleteDirectory(fs.config(), remotePath);
+        } else {
+            NfsSftpFsIO.deleteFile(fs.config(), remotePath);
         }
-
-        Files.delete(nfsPath.getDelegate());
-        nfsPath.getNfsFileSystem().deleteRemote(nfsPath.getDelegate(), isDirectory);
     }
 
     @Override
     public void copy(Path source, Path target, CopyOption... options) throws IOException {
         NfsPath src = requireNfsPath(source);
         NfsPath dst = requireNfsPath(target);
-        dst.getNfsFileSystem().ensureWritable();
+        NfsFileSystem fs = dst.getNfsFileSystem();
+        fs.ensureWritable();
 
-        Files.copy(src.getDelegate(), dst.getDelegate(), options);
-        if (Files.isDirectory(dst.getDelegate())) {
-            dst.getNfsFileSystem().createRemoteDirectory(dst.getDelegate());
-        } else {
-            dst.getNfsFileSystem().syncFile(dst.getDelegate());
+        String srcRemote = src.getNfsFileSystem().toRemotePath(src);
+        String dstRemote = dst.getNfsFileSystem().toRemotePath(dst);
+        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(src.getNfsFileSystem().config(), srcRemote);
+
+        if (stat.directory()) {
+            throw new UnsupportedOperationException("Directory copy is not supported");
         }
+        NfsSftpFsIO.copyFile(src.getNfsFileSystem().config(), srcRemote, dstRemote);
     }
 
     @Override
     public void move(Path source, Path target, CopyOption... options) throws IOException {
         NfsPath src = requireNfsPath(source);
         NfsPath dst = requireNfsPath(target);
-        src.getNfsFileSystem().ensureWritable();
-        dst.getNfsFileSystem().ensureWritable();
+        NfsFileSystem fs = dst.getNfsFileSystem();
+        fs.ensureWritable();
 
-        boolean srcWasDirectory = Files.isDirectory(src.getDelegate());
-        Files.move(src.getDelegate(), dst.getDelegate(), options);
-        src.getNfsFileSystem().deleteRemote(src.getDelegate(), srcWasDirectory);
-
-        if (Files.isDirectory(dst.getDelegate())) {
-            dst.getNfsFileSystem().createRemoteDirectory(dst.getDelegate());
-        } else {
-            dst.getNfsFileSystem().syncFile(dst.getDelegate());
-        }
+        String srcRemote = src.getNfsFileSystem().toRemotePath(src);
+        String dstRemote = dst.getNfsFileSystem().toRemotePath(dst);
+        NfsSftpFsIO.move(src.getNfsFileSystem().config(), srcRemote, dstRemote);
     }
 
     @Override
-    public boolean isSameFile(Path path, Path path2) throws IOException {
+    public boolean isSameFile(Path path, Path path2) {
         NfsPath left = requireNfsPath(path);
         NfsPath right = requireNfsPath(path2);
-        return Files.isSameFile(left.getDelegate(), right.getDelegate());
+        return left.getNfsFileSystem() == right.getNfsFileSystem()
+                && left.toString().equals(right.toString());
     }
 
     @Override
-    public boolean isHidden(Path path) throws IOException {
-        return Files.isHidden(requireNfsPath(path).getDelegate());
+    public boolean isHidden(Path path) {
+        NfsPath nfsPath = requireNfsPath(path);
+        Path fileName = Path.of(nfsPath.toString()).getFileName();
+        return fileName != null && fileName.toString().startsWith(".");
     }
 
     @Override
-    public FileStore getFileStore(Path path) throws IOException {
-        return Files.getFileStore(requireNfsPath(path).getDelegate());
+    public FileStore getFileStore(Path path) {
+        throw new UnsupportedOperationException("FileStore is not supported for weefs SFTP");
     }
 
     @Override
     public void checkAccess(Path path, AccessMode... modes) throws IOException {
         NfsPath nfsPath = requireNfsPath(path);
-        if (!Files.exists(nfsPath.getDelegate())) {
-            throw new NoSuchFileException(nfsPath.toString());
-        }
+        NfsFileSystem fs = nfsPath.getNfsFileSystem();
+        String remotePath = fs.toRemotePath(nfsPath);
 
+        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(fs.config(), remotePath);
         if (modes == null) {
             return;
         }
 
         for (AccessMode mode : modes) {
-            if (mode == AccessMode.READ && !Files.isReadable(nfsPath.getDelegate())) {
-                throw new IOException("Read access denied: " + nfsPath);
-            }
             if (mode == AccessMode.WRITE) {
-                nfsPath.getNfsFileSystem().ensureWritable();
-                if (!Files.isWritable(nfsPath.getDelegate())) {
-                    throw new IOException("Write access denied: " + nfsPath);
-                }
+                fs.ensureWritable();
             }
-            if (mode == AccessMode.EXECUTE && !Files.isExecutable(nfsPath.getDelegate())) {
-                throw new IOException("Execute access denied: " + nfsPath);
+            if (mode == AccessMode.EXECUTE && stat.directory()) {
+                continue;
             }
         }
     }
 
     @Override
     public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type, LinkOption... options) {
-        return Files.getFileAttributeView(requireNfsPath(path).getDelegate(), type, options);
+        return null;
     }
 
     @Override
     public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type, LinkOption... options)
             throws IOException {
-        return Files.readAttributes(requireNfsPath(path).getDelegate(), type, options);
+        if (!BasicFileAttributes.class.isAssignableFrom(type)) {
+            throw new UnsupportedOperationException("Only basic attributes are supported");
+        }
+        NfsPath nfsPath = requireNfsPath(path);
+        NfsFileSystem fs = nfsPath.getNfsFileSystem();
+        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(fs.config(), fs.toRemotePath(nfsPath));
+
+        NfsBasicFileAttributes attrs = new NfsBasicFileAttributes(
+                stat.directory(),
+                stat.symbolicLink(),
+                stat.size(),
+                stat.lastModifiedTime());
+        return type.cast(attrs);
     }
 
     @Override
     public Map<String, Object> readAttributes(Path path, String attributes, LinkOption... options) throws IOException {
-        return Files.readAttributes(requireNfsPath(path).getDelegate(), attributes, options);
+        NfsPath nfsPath = requireNfsPath(path);
+        NfsFileSystem fs = nfsPath.getNfsFileSystem();
+        return NfsSftpFsIO.readBasicAttributesMap(fs.config(), fs.toRemotePath(nfsPath));
     }
 
     @Override
-    public void setAttribute(Path path, String attribute, Object value, LinkOption... options) throws IOException {
-        NfsPath nfsPath = requireNfsPath(path);
-        nfsPath.getNfsFileSystem().ensureWritable();
-        Files.setAttribute(nfsPath.getDelegate(), attribute, value, options);
-        if (Files.isDirectory(nfsPath.getDelegate())) {
-            nfsPath.getNfsFileSystem().createRemoteDirectory(nfsPath.getDelegate());
-        } else {
-            nfsPath.getNfsFileSystem().syncFile(nfsPath.getDelegate());
-        }
+    public void setAttribute(Path path, String attribute, Object value, LinkOption... options) {
+        throw new UnsupportedOperationException("setAttribute is not supported for weefs SFTP");
     }
 
     void unregister(NfsFileSystem fs) {
         mounted.entrySet().removeIf(entry -> entry.getValue() == fs);
     }
 
-    private static void deleteRecursively(Path root) {
-        if (root == null || !Files.exists(root)) {
-            return;
-        }
-        try (var walk = Files.walk(root)) {
-            walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                }
-            });
-        } catch (IOException ignored) {
-        }
-    }
-
     private String toKey(NfsParsedUri parsed) {
         return parsed.username() + "@" + parsed.host() + ":" + parsed.port() + parsed.remotePath();
     }
 
-    private static boolean isWriteOperation(Set<? extends OpenOption> options) {
-        if (options == null || options.isEmpty()) {
-            return false;
+    private static String joinVirtual(String parent, String child) {
+        if ("/".equals(parent)) {
+            return "/" + child;
         }
-
-        for (OpenOption option : options) {
-            String name = String.valueOf(option).toUpperCase();
-            if (name.contains("WRITE") || name.contains("APPEND") || name.contains("CREATE")
-                    || name.contains("TRUNCATE") || name.contains("DELETE")) {
-                return true;
-            }
-        }
-        return false;
+        return parent + "/" + child;
     }
 
     private static NfsPath requireNfsPath(Path path) {
@@ -314,5 +323,26 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
             throw new ProviderMismatchException("Path is not managed by weefs provider: " + path);
         }
         return (NfsPath) path;
+    }
+
+    private static Set<StandardOpenOption> resolveOpenOptions(Set<? extends OpenOption> options) {
+        EnumSet<StandardOpenOption> resolved = EnumSet.noneOf(StandardOpenOption.class);
+        if (options != null) {
+            for (OpenOption option : options) {
+                if (option instanceof StandardOpenOption standard) {
+                    resolved.add(standard);
+                }
+            }
+        }
+
+        if (!resolved.contains(StandardOpenOption.READ)
+                && !resolved.contains(StandardOpenOption.WRITE)
+                && !resolved.contains(StandardOpenOption.APPEND)) {
+            resolved.add(StandardOpenOption.READ);
+        }
+        if (resolved.contains(StandardOpenOption.APPEND)) {
+            resolved.add(StandardOpenOption.WRITE);
+        }
+        return resolved;
     }
 }

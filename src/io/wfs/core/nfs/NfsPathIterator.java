@@ -20,6 +20,6 @@ final class NfsPathIterator implements Iterator<Path> {
 
     @Override
     public Path next() {
-        return new NfsPath(fileSystem, delegate.next());
+        return new NfsPath(fileSystem, delegate.next().toString());
     }
 }
