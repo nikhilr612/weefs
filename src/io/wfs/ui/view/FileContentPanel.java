@@ -7,7 +7,6 @@ import io.wfs.ui.util.FileTypeDetector;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
-import javax.swing.text.DefaultEditorKit;
 import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.io.IOException;
@@ -77,6 +76,15 @@ public final class FileContentPanel extends JPanel {
         textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         textArea.setTabSize(4);
         textArea.setLineWrap(false);
+        // Ctrl+S in editor should save the current file content, not close/reopen the whole archive.
+        KeyStroke saveKey = KeyStroke.getKeyStroke("control S");
+        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(saveKey, "saveCurrentFile");
+        textArea.getActionMap().put("saveCurrentFile", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                saveCurrentFile();
+            }
+        });
         JScrollPane textScroll = new JScrollPane(textArea);
         // Add line numbers
         textScroll.setRowHeaderView(new LineNumberView(textArea));
