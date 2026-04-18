@@ -1,119 +1,189 @@
-# Bad Design Report — weefs
+# WeeFsApp — Bad-Design Analysis Report (v2)
 
-This report catalogs every bad design choice identified in the `bad-design` branch,
-organized by category: logical errors, SOLID violations, DRY violations,
-anti-patterns, and maintainability issues.
-
----
-
-## 1. Logical Errors (Fixed in this branch)
-
-| # | File | Issue | Fix Applied |
-|---|------|-------|-------------|
-| 1 | `ArchiveModel.java:139` | `pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly)` — the "old value" argument is `!readOnly` (negation of the *new* value) instead of the actual *previous* value. Listeners see a wrong before/after transition. | Capture `previousReadOnly` before mutating the field; pass it as the old value. |
-| 2 | `NfsFsProvider.java` inner class `NfsWritableByteChannel` | `position` field declared as `int`; `position(long)` silently truncates via `(int) newPosition`. Files > 2 GB produce a corrupt position. | Change field to `long`; validate in `position(long)` — throw `IOException` if value exceeds `Integer.MAX_VALUE` (buffer-backed channel constraint). |
-| 3 | `NfsFsProvider.newFileSystem()` | `catch (IOException ex) { throw ex; }` — a no-op catch-rethrow that adds noise, suppresses IDE warnings, and hides intent. | Remove the try/catch wrapper entirely (method already declares `throws IOException`). |
-| 4 | `MenuBarFactory.createNfsMenu()` | Unconditional `(INfsController) controller` cast. Any `IArchiveController` that does not implement `INfsController` throws `ClassCastException`. | Guard with `instanceof` check; return a disabled "NFS not available" menu item if the cast is invalid. |
-| 5 | `ToolBarFactory.create()` | Same unconditional `(INfsController) controller` cast. NFS buttons call methods on `null`-equivalent reference. | Guard with `instanceof`; store as `final`; null-check in every lambda. |
+> This report documents logical errors and design-principle violations found
+> in the `bad-design` branch after the second round of upstream changes.
+> It supersedes the first-iteration report.
 
 ---
 
-## 2. SOLID Violations
+## 1  Logical Errors
 
-### 2.1 Single Responsibility Principle (SRP)
+### 1.1 `NfsSyncingByteChannel` — `position` field integer overflow
+**File:** `src/io/wfs/core/nfs/NfsSyncingByteChannel.java`
+
+`position` was declared as `int`.  In `write()`, the expression
+`position + count` uses `int` arithmetic; if `position` is close to
+`Integer.MAX_VALUE` the sum silently wraps to a negative number, which is
+then passed to `ensureCapacity()` → `Arrays.copyOf()` and throws
+`NegativeArraySizeException` instead of a meaningful `IOException`.
+
+**Fix applied:** `position` promoted to `long`; overflow guard added in
+`write()` (`(long) position + count > Integer.MAX_VALUE`); all array-index
+uses cast to `(int)` after validation.
+
+---
+
+### 1.2 `NfsPath.hashCode()` — inconsistency with `equals()`
+**File:** `src/io/wfs/core/nfs/NfsPath.java`
+
+`equals()` uses the `delegate` field (`Path.of(virtualPath)`) for path
+comparison, which honours platform-specific semantics (case-insensitive on
+Windows).  `hashCode()` hashed the raw `String virtualPath`, so on
+case-insensitive file systems two paths that compare equal could have
+different hash codes — violating the `Object.hashCode()` contract.
+
+**Fix applied:** `hashCode()` now hashes `delegate` instead of `virtualPath`.
+
+---
+
+### 1.3 `NfsFileSystem.ensureWritableFor()` — fragile option name matching
+**File:** `src/io/wfs/core/nfs/NfsFileSystem.java`
+
+Write-access detection used `String.valueOf(option).toUpperCase().contains("WRITE")` etc.  Any custom `OpenOption` whose `toString()` accidentally contains "CREATE", "WRITE", or "DELETE" would be mis-identified.  The inner `if` block was also misaligned by four extra spaces (cosmetic indentation bug).
+
+**Fix applied:** Replaced with explicit `StandardOpenOption` enum comparisons
+(`WRITE`, `APPEND`, `CREATE`, `CREATE_NEW`, `TRUNCATE_EXISTING`,
+`DELETE_ON_CLOSE`).  Indentation corrected.
+
+---
+
+### 1.4 `ArchiveController` — SFTP mounts entirely broken
+**Files:** `ArchiveController.java`, `ArchiveModel.java`, `MenuBarFactory.java`
+
+`mountNfs()` was rewritten to call `model.openMountUri(uri, readOnly)`, but
+`currentNfsConfig` was never updated.  Three downstream effects:
+
+| Symptom | Root cause |
+|---------|-----------|
+| `isNfsMounted()` always `false` after SFTP mount | checked `currentNfsConfig != null` only |
+| `unmountNfs()` always a no-op | guarded on `currentNfsConfig == null` |
+| `extractNfsSelected()` NPE risk | called `nfsFileOps.extractTo(currentNfsConfig, …)` with null |
+| NFS menu items never enabled | `MenuBarFactory` listened only to `PROP_NFS_CONFIG`, never fired for SFTP |
+
+**Fix applied:**
+* `ArchiveModel`: added `remoteMounted` boolean flag; `openMountUri()` sets it
+  for `weefs://` URIs and fires new `PROP_REMOTE_MOUNTED` event;
+  `closeArchive()` clears and fires the inverse event.
+* `ArchiveController.isNfsMounted()`: delegates to `model.isRemoteMounted()` in
+  addition to checking `currentNfsConfig`.
+* `ArchiveController.unmountNfs()`: routes to `model.closeArchive()` for SFTP
+  mounts.
+* `ArchiveController.extractNfsSelected()`: falls back to
+  `fileOps.extractTo()` when `currentNfsConfig == null`.
+* `MenuBarFactory`: NFS menu now also subscribes to `PROP_REMOTE_MOUNTED`.
+
+---
+
+## 2  SOLID Violations
+
+### 2.1 Single-Responsibility Principle (SRP)
 
 | Class | Problem |
 |-------|---------|
-| `ArchiveModel` | Manages **both** the local ZIP/TAR archive lifecycle **and** the NFS mount state. These are entirely separate concerns (different data, different events, different error modes). One change to NFS config inadvertently affects archive-open state logic. |
-| `ArchiveController` | 502-line **god class**. Implements `IArchiveController` *and* `INfsController`, handles archive open/save/close, NFS mount/unmount, file CRUD, dialog orchestration, and background worker management — all in one class. |
-| `ExtZipFsIO` | Static utility that dispatches ZIP extraction, TAR extraction, single-file decompression, ZIP writing, TAR writing, and single-file compression all in one class. Adding a new format requires touching this file. |
+| `ArchiveModel` | God object: manages archive file systems, legacy NFS config, SFTP remote-mount state, property-change notifications, UI-tree helpers, and file I/O helpers all in one class |
+| `ArchiveController` | Handles archive lifecycle, NFS lifecycle, file operations, background threading, dialog orchestration, and format detection |
+| `NfsSftpFsIO` | Handles SFTP session management, file I/O, directory listing, attribute reading, and path normalisation |
 
 ### 2.2 Open/Closed Principle (OCP)
 
-| Class | Problem |
-|-------|---------|
-| `ArchiveFormatDetector` | Uses a hardcoded chain of `if (name.endsWith(".zip")) … else if (name.endsWith(".tar")) …` branches. Adding a new format requires modifying the detector. |
-| `CompressionStrategyFactory` | Uses a `switch` on a string key. Adding a new compression algorithm requires editing the factory. |
-| `FileTypeDetector` | Hardcodes sets of file extensions per type (text, image, audio, etc.). New extensions require code changes. |
-| `TarArchiveFormat` | `supports()` only matches `.tar`; compressed variants (`.tar.gz`, `.tar.bz2`, etc.) are silently ignored by the strategy registry even though they are valid TAR-family formats. |
+* **`FileSystemFactory.registerDefaults()`** hardcodes exactly three drivers.
+  Adding a fourth driver (e.g., S3, WebDAV) requires editing the factory
+  rather than just registering a new implementation.
+* **`ArchiveFormatDetector`** is a chain of `if/endsWith` blocks; adding a
+  new format requires editing the detector.
+* **`CompressionStrategyFactory`** uses a `switch`; same problem.
 
-### 2.3 Liskov Substitution Principle (LSP)
+### 2.3 Dependency-Inversion Principle (DIP)
 
-| Class | Problem |
-|-------|---------|
-| `NfsPath` | Three `Path` interface methods throw `UnsupportedOperationException`: `relativize()`, `toUri()`, and `toFile()`. Any code that uses a `Path` polymorphically (e.g., Java NIO utilities, stream operations) will break at runtime when handed an `NfsPath`. |
-| `ExtZipPath` | `isAbsolute()` always returns `true` regardless of the actual path string, violating the `Path` contract. `hashCode()` uses `System.identityHashCode(fileSystem)` which is not stable across JVM runs and breaks `HashMap`/`HashSet` semantics. |
+* `NfsFileSystemDriver` instantiates `NfsSftpFsProvider` directly with `new`.
+* `ZipFileSystemDriver` instantiates `ExtZipFsProvider` directly with `new`.
+  Both depend on concrete classes; neither accepts an interface.
+* `INfsController.getNfsFileOps()` returns the concrete `NfsFileOperations`
+  class, leaking an implementation detail through the interface.
+* `WeeFsApp` wires `ArchiveModel` and `ArchiveController` by direct
+  instantiation — no dependency injection, making substitution impossible.
 
-### 2.4 Dependency Inversion Principle (DIP)
+### 2.4 Interface Segregation Principle (ISP)
 
-| Site | Problem |
-|------|---------|
-| `ArchiveModel` | Directly instantiates `ExtZipFsProvider` (a concrete class). There is no `FileSystemProvider` interface abstraction; the model is tightly coupled to the ZIP/TAR implementation and cannot be tested with a mock provider. |
-| `ArchiveController` | Directly instantiates `FileOperations` and `NfsFileOperations` inside the constructor. No injection point exists; the controller cannot be tested without real file I/O. |
-
-### 2.5 Interface Segregation Principle (ISP)
-
-| Site | Problem |
-|------|---------|
-| `INfsController.isNfsMounted()` | Returns `boolean` but forces any non-NFS controller to implement NFS-awareness. The NFS concern leaks into the general controller interface. |
-| `MenuBarFactory` / `ToolBarFactory` | Accept `IArchiveController` but cast it to `INfsController` — the factory effectively requires a *wider* interface than it declares. Clients who pass a minimal `IArchiveController` implementation crash at runtime. |
+`IFileOperations` bundles seven methods (`createFile`, `createDirectory`,
+`delete`, `rename`, `saveFile`, `extractTo`, `copy`).  Callers that only need
+read operations still depend on the write half.
 
 ---
 
-## 3. DRY Violations
+## 3  DRY Violations
 
-| # | Duplicated Code | Locations |
-|---|-----------------|-----------|
-| 1 | `deleteRecursively(Path)` — recursive directory deletion logic | `ExtZipFsIO`, `NfsIO`, `FileOperations` — three nearly-identical implementations |
-| 2 | `showError(String)` — `JOptionPane.showMessageDialog` error helper | `FileOperations`, `NfsFileOperations` |
-| 3 | Read-only guard | Every method in `NfsFileOperations` starts with `if (config.isReadOnly()) return false` |
-| 4 | "none" compression key | Hardcoded in both `ZipArchiveFormat` and `TarArchiveFormat`; format-to-default-compression mapping is not centralized |
-| 5 | `toLowerCase()` locale inconsistency | `ZipArchiveFormat.supports()` calls `toLowerCase()` without `Locale.ROOT`; `TarArchiveFormat` uses `Locale.ROOT`; `ArchiveFormatDetector` uses `Locale.ROOT` — three different conventions for the same operation |
-
----
-
-## 4. Anti-Patterns
-
-### 4.1 Singleton — `WeeFsApp`
-`WeeFsApp` uses a manual double-checked locking singleton but the `instance` field is **not `volatile`**, allowing a partially-constructed object to be visible to other threads. Beyond the thread-safety bug, the singleton pattern makes unit testing impossible (cannot substitute a mock launcher).
-
-### 4.2 Magic String — `ArchiveTreePanel`
-`"Loading..."` is used as a sentinel placeholder child node to mark lazy-load tree nodes. Any refactor that renames the string, or any file that happens to be named `"Loading..."`, silently breaks the lazy-load detection.
-
-### 4.3 God Object — `ArchiveController`
-502 lines, two interfaces, six collaborators, background threading, dialog management, and file I/O dispatch — far beyond a single responsibility. Adding any new feature requires understanding the entire class.
-
-### 4.4 Duplicate State — `ArchiveController.currentNfsConfig`
-The controller maintains its own `currentNfsConfig` field that mirrors `model.getNfsConfig()`. These can drift out of sync: if the model updates its config through another code path, the controller's cached copy becomes stale, causing NFS operations to use a wrong/outdated configuration.
-
-### 4.5 Feature Envy — `ArchiveTreePanel`
-`ArchiveTreePanel.loadChildrenIfNeeded()` directly accesses `model.getNfsConfig()` to determine display logic (whether to list NFS children vs. archive children). This is domain logic that belongs in the model or controller, not in the view.
-
-### 4.6 Primitive Obsession — `NfsConnectionConfig`
-Host/port/path are stored as raw `String`/`int` primitives with no encapsulation of the connection URI. Callers must manually assemble URIs from parts, leading to scattered string concatenation across `NfsFsProvider`, `NfsIO`, and `NfsPath`.
+| Duplication | Locations |
+|-------------|-----------|
+| `deleteRecursive` / `deleteRecursively` | `FileOperations.java`, `NfsIO.java` — near-identical walk-and-delete logic |
+| Error dialog boilerplate | `FileOperations.showError()`, `NfsFileOperations.showError()`, `ArchiveController.showError()` — three separate `JOptionPane.showMessageDialog` wrappers |
+| Read-only guard pattern | Repeated `if (config.isReadOnly()) return false;` in every `NfsFileOperations` method |
+| Session-per-operation pattern | `NfsSftpFsIO.withChannel()` duplicated inline for read, write, list, stat, etc. |
 
 ---
 
-## 5. Maintainability Issues
+## 4  Anti-Patterns
+
+### 4.1 Stale-State / Split-Brain (ArchiveController)
+`ArchiveController.currentNfsConfig` and `ArchiveModel.nfsConfig` track
+overlapping state that can diverge (as they did post-refactor).  A single
+source of truth should live in the model.
+
+### 4.2 Dual-Constructor Mode (`NfsFileSystem`)
+`NfsFileSystem` has two constructors — one for SFTP, one for legacy NFS —
+with runtime `null` checks throughout (`config != null ? … : legacyConfig`).
+This is a textbook case of inappropriate intimacy and violates SRP; the two
+modes should be separate classes sharing an interface.
+
+### 4.3 Connection-Per-Operation (`NfsSftpFsIO`)
+`withChannel()` opens a new JSch SSH session for every single SFTP call.
+This is an O(n) connection overhead where a connection pool or a persistent
+session would give O(1).  Additionally, `listDirectory()` opens two channels
+where one would suffice.
+
+### 4.4 Primitive Obsession (`NfsParsedUri`)
+URI parsing and SSH configuration are bundled together; the result is a
+package-private record that callers cannot subclass, test with fakes, or
+extend without editing `NfsParsedUri`.
+
+### 4.5 Singleton (`WeeFsApp`)
+`WeeFsApp` uses a static singleton with a `synchronized getInstance()`.
+This makes the application untestable in isolation and couples start-up logic
+to global state.
+
+### 4.6 Magic String Keys (`FileSystemFactory`)
+`FileSystemFactory` maps URI schemes to drivers with hard-coded string
+literals (`"xzip"`, `"weefs"`, `"file"`).  Typos are not caught at
+compile time.
+
+---
+
+## 5  Maintainability Issues
 
 | Issue | Impact |
 |-------|--------|
-| `ArchiveController` god class | Any feature touches the same 500-line file, causing merge conflicts and regression risk |
-| No injection in `ArchiveModel` / `ArchiveController` | Unit tests cannot run without actual file system and NFS server access |
-| `NfsPath` throws `UnsupportedOperationException` | Third-party NIO utilities (e.g., `Files.copy`, stream collectors) silently fail with misleading stack traces |
-| `ExtZipPath.hashCode()` instability | Collections (`HashMap`, `HashSet`) containing `ExtZipPath` objects exhibit non-deterministic behavior |
-| `ExtZipPath.isAbsolute()` always `true` | `Path.resolve()` behaves incorrectly for any path that should be relative |
-| Three copies of `deleteRecursively` | Bug fixes must be applied in three places; one copy may silently diverge |
-| Hardcoded format detection | Each new archive format (e.g., `.7z`, `.rar`) requires changes in multiple classes |
+| No connection pooling in SFTP layer | Performance degrades linearly with SFTP operation count; every file browse triggers a new SSH handshake |
+| `ArchiveModel.listChildren()` branching on `isNfsMounted()` | Every new backend (S3, WebDAV…) would require another `if` branch |
+| `NfsFileSystem` dual-mode | Every new method must branch on `config != null` — complexity grows with each addition |
+| `SwingUtilities.invokeLater` in non-UI classes (`NfsFileOperations`) | Couples business logic to Swing EDT; breaks headless or test use |
+| No `@GuardedBy` annotations despite `volatile` and `AtomicBoolean` use | Race conditions are hard to spot during code review |
+| `InstallShutdownHook()` must be called manually | If the caller forgets, SFTP sessions leak on JVM exit |
 
 ---
 
-## Summary
+## 6  Summary Table
 
-The `bad-design` branch contains **5 logical errors** (fixed), **10+ SOLID violations**
-across all five principles, **5 DRY violations**, **6 anti-patterns**, and several
-maintainability hazards. The most impactful issues are the god-class `ArchiveController`,
-the SRP violation in `ArchiveModel`, the three copies of `deleteRecursively`, and the LSP
-violations in `NfsPath` / `ExtZipPath` that break standard Java NIO contracts.
+| # | Category | Severity | Fixed in bad-design? |
+|---|----------|----------|----------------------|
+| 1 | `NfsSyncingByteChannel` int overflow | **Critical** | ✅ |
+| 2 | `NfsPath.hashCode()` contract violation | **High** | ✅ |
+| 3 | `ensureWritableFor()` fragile string match | **Medium** | ✅ |
+| 4 | SFTP mount invisible to controller/UI | **Critical** | ✅ |
+| 5 | `ArchiveModel` god object (SRP) | Medium | ❌ (deferred to good-design) |
+| 6 | `FileSystemFactory` OCP violation | Medium | ❌ |
+| 7 | `NfsFileSystemDriver`/`ZipFileSystemDriver` DIP | Medium | ❌ |
+| 8 | Connection-per-operation anti-pattern | High | ❌ |
+| 9 | `NfsFileSystem` dual-constructor | Medium | ❌ |
+| 10 | DRY violations (delete, error dialog) | Low | ❌ |
 
-All of these are addressed in the `good-design` branch.
+Items 5–10 are addressed in the `good-design` branch.
