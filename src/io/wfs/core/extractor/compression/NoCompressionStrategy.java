@@ -3,7 +3,7 @@ package io.wfs.core.extractor.compression;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-public final class NoCompressionStrategy implements ICompressionStrategy {
+final class NoCompressionStrategy implements ICompressionStrategy {
 
     @Override
     public InputStream wrapInput(InputStream input) {

@@ -3,18 +3,18 @@ package io.wfs.core.extractor;
 final class ArchiveFormat {
 
     private final ArchiveContainerType containerType;
-    private final String compressionKey;
+    private final io.wfs.core.extractor.compression.CompressionStrategyType compressionType;
 
-    ArchiveFormat(ArchiveContainerType containerType, String compressionKey) {
+    ArchiveFormat(ArchiveContainerType containerType, io.wfs.core.extractor.compression.CompressionStrategyType compressionType) {
         this.containerType = containerType;
-        this.compressionKey = compressionKey;
+        this.compressionType = compressionType;
     }
 
     ArchiveContainerType containerType() {
         return containerType;
     }
 
-    String compressionKey() {
-        return compressionKey;
+    io.wfs.core.extractor.compression.CompressionStrategyType compressionType() {
+        return compressionType;
     }
 }

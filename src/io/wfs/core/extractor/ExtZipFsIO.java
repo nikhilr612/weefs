@@ -1,7 +1,6 @@
 package io.wfs.core.extractor;
 
-import io.wfs.core.extractor.compression.CompressionStrategyFactory;
-import io.wfs.core.extractor.compression.ICompressionStrategy;
+import io.wfs.core.extractor.compression.CompressionStrategyType;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -33,8 +32,8 @@ final class ExtZipFsIO {
         ArchiveFormat format = ArchiveFormatDetector.detect(archiveFile);
         switch (format.containerType()) {
             case ZIP -> extractZipToDirectory(archiveFile, targetRoot);
-            case TAR -> extractTarToDirectory(archiveFile, targetRoot, format.compressionKey());
-            case SINGLE_FILE -> extractSingleFileArchiveToDirectory(archiveFile, targetRoot, format.compressionKey());
+            case TAR -> extractTarToDirectory(archiveFile, targetRoot, format.compressionType());
+            case SINGLE_FILE -> extractSingleFileArchiveToDirectory(archiveFile, targetRoot, format.compressionType());
         }
     }
 
@@ -68,15 +67,14 @@ final class ExtZipFsIO {
         }
     }
 
-    static void extractTarToDirectory(Path tarArchive, Path targetRoot, String compressionKey) throws IOException {
+    static void extractTarToDirectory(Path tarArchive, Path targetRoot, CompressionStrategyType compressionType) throws IOException {
         if (!Files.exists(tarArchive)) {
             return;
         }
 
-        ICompressionStrategy strategy = CompressionStrategyFactory.forKey(compressionKey);
         byte[] buffer = new byte[8192];
         try (InputStream in = new BufferedInputStream(Files.newInputStream(tarArchive));
-             InputStream compressedIn = strategy.wrapInput(in);
+             InputStream compressedIn = compressionType.wrapInput(in);
              TarInputStream tarIn = new TarInputStream(compressedIn)) {
             TarEntry entry;
             while ((entry = tarIn.getNextEntry()) != null) {
@@ -109,8 +107,8 @@ final class ExtZipFsIO {
         ArchiveFormat format = ArchiveFormatDetector.detect(archiveFile);
         switch (format.containerType()) {
             case ZIP -> writeDirectoryToZip(sourceRoot, archiveFile);
-            case TAR -> writeDirectoryToTar(sourceRoot, archiveFile, format.compressionKey());
-            case SINGLE_FILE -> writeDirectoryToSingleFileArchive(sourceRoot, archiveFile, format.compressionKey());
+            case TAR -> writeDirectoryToTar(sourceRoot, archiveFile, format.compressionType());
+            case SINGLE_FILE -> writeDirectoryToSingleFileArchive(sourceRoot, archiveFile, format.compressionType());
         }
     }
 
@@ -160,18 +158,17 @@ final class ExtZipFsIO {
         }
     }
 
-    static void writeDirectoryToTar(Path sourceRoot, Path archiveFile, String compressionKey) throws IOException {
+    static void writeDirectoryToTar(Path sourceRoot, Path archiveFile, CompressionStrategyType compressionType) throws IOException {
         Path parent = archiveFile.toAbsolutePath().normalize().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
 
-        ICompressionStrategy strategy = CompressionStrategyFactory.forKey(compressionKey);
-        String suffix = "none".equals(compressionKey) ? ".tar" : ".tar." + compressionKey;
+        String suffix = compressionType == CompressionStrategyType.NONE ? ".tar" : ".tar." + compressionType.key();
         Path tempArchive = Files.createTempFile(parent, "extzipfs-", suffix);
         try {
             try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempArchive));
-                 OutputStream compressedOut = strategy.wrapOutput(out);
+                 OutputStream compressedOut = compressionType.wrapOutput(out);
                  TarOutputStream tarOut = new TarOutputStream(compressedOut);
                  Stream<Path> walk = Files.walk(sourceRoot)) {
                 List<Path> entries = walk.sorted().collect(Collectors.toList());
@@ -209,12 +206,11 @@ final class ExtZipFsIO {
         }
     }
 
-    static void extractSingleFileArchiveToDirectory(Path archiveFile, Path targetRoot, String compressionKey) throws IOException {
+    static void extractSingleFileArchiveToDirectory(Path archiveFile, Path targetRoot, CompressionStrategyType compressionType) throws IOException {
         if (!Files.exists(archiveFile)) {
             return;
         }
 
-        ICompressionStrategy strategy = CompressionStrategyFactory.forKey(compressionKey);
         String outputFileName = deriveSingleFileName(archiveFile);
         Path destination = targetRoot.resolve(outputFileName).normalize();
         if (!destination.startsWith(targetRoot)) {
@@ -227,26 +223,28 @@ final class ExtZipFsIO {
         }
 
         try (InputStream in = new BufferedInputStream(Files.newInputStream(archiveFile));
-             InputStream decompressedIn = strategy.wrapInput(in);
+           InputStream decompressedIn = compressionType.wrapInput(in);
              OutputStream out = new BufferedOutputStream(Files.newOutputStream(destination))) {
             decompressedIn.transferTo(out);
         }
     }
 
-    static void writeDirectoryToSingleFileArchive(Path sourceRoot, Path archiveFile, String compressionKey) throws IOException {
+    static void writeDirectoryToSingleFileArchive(Path sourceRoot, Path archiveFile, CompressionStrategyType compressionType) throws IOException {
         Path parent = archiveFile.toAbsolutePath().normalize().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
 
         Path sourceFile = findSingleFileToCompress(sourceRoot);
-        ICompressionStrategy strategy = CompressionStrategyFactory.forKey(compressionKey);
-        Path tempArchive = Files.createTempFile(parent, "extzipfs-", "." + compressionKey);
+        Path tempArchive = Files.createTempFile(parent, "extzipfs-", "." + compressionType.key());
         try {
-            try (InputStream in = new BufferedInputStream(Files.newInputStream(sourceFile));
-                 OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempArchive));
-                 OutputStream compressedOut = strategy.wrapOutput(out)) {
-                in.transferTo(compressedOut);
+            try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempArchive));
+                 OutputStream compressedOut = compressionType.wrapOutput(out)) {
+                if (sourceFile != null) {
+                    try (InputStream in = new BufferedInputStream(Files.newInputStream(sourceFile))) {
+                        in.transferTo(compressedOut);
+                    }
+                }
             }
 
             try {
@@ -283,6 +281,10 @@ final class ExtZipFsIO {
                     .filter(path -> !path.equals(sourceRoot))
                     .sorted()
                     .collect(Collectors.toList());
+        }
+
+        if (entries.isEmpty()) {
+            return null;
         }
 
         if (entries.size() != 1 || !Files.isRegularFile(entries.get(0))) {

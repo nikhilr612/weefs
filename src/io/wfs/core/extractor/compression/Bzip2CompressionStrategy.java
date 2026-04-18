@@ -3,18 +3,25 @@ package io.wfs.core.extractor.compression;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.tools.bzip2.CBZip2InputStream;
+import org.apache.tools.bzip2.CBZip2OutputStream;
 
-public final class Bzip2CompressionStrategy implements ICompressionStrategy {
+final class Bzip2CompressionStrategy implements ICompressionStrategy {
 
     @Override
     public InputStream wrapInput(InputStream input) throws IOException {
-        return new BZip2CompressorInputStream(input);
+        int magic1 = input.read();
+        int magic2 = input.read();
+        if (magic1 != 'B' || magic2 != 'Z') {
+            throw new IOException("Invalid BZip2 header");
+        }
+        return new CBZip2InputStream(input);
     }
 
     @Override
     public OutputStream wrapOutput(OutputStream output) throws IOException {
-        return new BZip2CompressorOutputStream(output);
+        output.write('B');
+        output.write('Z');
+        return new CBZip2OutputStream(output);
     }
 }

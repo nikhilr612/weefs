@@ -3,18 +3,19 @@ package io.wfs.core.extractor.compression;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream;
-import org.apache.commons.compress.compressors.lzma.LZMACompressorOutputStream;
+import org.tukaani.xz.LZMA2Options;
+import org.tukaani.xz.LZMAInputStream;
+import org.tukaani.xz.LZMAOutputStream;
 
-public final class LzmaCompressionStrategy implements ICompressionStrategy {
+final class LzmaCompressionStrategy implements ICompressionStrategy {
 
     @Override
     public InputStream wrapInput(InputStream input) throws IOException {
-        return new LZMACompressorInputStream(input);
+        return new LZMAInputStream(input);
     }
 
     @Override
     public OutputStream wrapOutput(OutputStream output) throws IOException {
-        return new LZMACompressorOutputStream(output);
+        return new LZMAOutputStream(output, new LZMA2Options(), -1L);
     }
 }

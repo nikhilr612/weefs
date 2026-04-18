@@ -6,11 +6,14 @@ import io.wfs.ui.model.FileNode;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.filechooser.FileFilter;
 import java.awt.*;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Default Swing implementation of {@link IArchiveController} and
@@ -24,17 +27,30 @@ import java.nio.file.Path;
 public final class ArchiveController implements IArchiveController, INfsController {
 
     private static final ArchiveFormatOption[] ARCHIVE_FORMAT_OPTIONS = {
-            new ArchiveFormatOption("ZIP (*.zip)", ".zip", "ZIP (*.zip)", "zip"),
-            new ArchiveFormatOption("TAR (*.tar)", ".tar", "TAR (*.tar)", "tar"),
-            new ArchiveFormatOption("TAR.GZ (*.tar.gz)", ".tar.gz", "TAR.GZ (*.tar.gz, *.tgz)", "gz", "tgz"),
-            new ArchiveFormatOption("TAR.BZ2 (*.tar.bz2)", ".tar.bz2", "TAR.BZ2 (*.tar.bz2, *.tbz2)", "bz2", "tbz2"),
-            new ArchiveFormatOption("TAR.XZ (*.tar.xz)", ".tar.xz", "TAR.XZ (*.tar.xz, *.txz)", "xz", "txz"),
-            new ArchiveFormatOption("TAR.LZMA (*.tar.lzma)", ".tar.lzma", "TAR.LZMA (*.tar.lzma)", "lzma"),
-            new ArchiveFormatOption("GZIP single-file (*.gz)", ".gz", "GZIP single-file (*.gz)", "gz"),
-            new ArchiveFormatOption("BZIP2 single-file (*.bz2)", ".bz2", "BZIP2 single-file (*.bz2)", "bz2"),
-            new ArchiveFormatOption("XZ single-file (*.xz)", ".xz", "XZ single-file (*.xz)", "xz"),
-            new ArchiveFormatOption("LZMA single-file (*.lzma)", ".lzma", "LZMA single-file (*.lzma)", "lzma")
+            new ArchiveFormatOption("ZIP (*.zip)", ".zip", "ZIP (*.zip)",
+                new String[] { ".zip" }, new String[] { "zip" }),
+            new ArchiveFormatOption("TAR (*.tar)", ".tar", "TAR (*.tar)",
+                new String[] { ".tar" }, new String[] { "tar" }),
+            new ArchiveFormatOption("TAR.GZ (*.tar.gz)", ".tar.gz", "TAR.GZ (*.tar.gz, *.tgz)",
+                new String[] { ".tar.gz", ".tgz" }, new String[] { "gz", "tgz" }),
+            new ArchiveFormatOption("TAR.BZ2 (*.tar.bz2)", ".tar.bz2", "TAR.BZ2 (*.tar.bz2, *.tbz2)",
+                new String[] { ".tar.bz2", ".tbz2" }, new String[] { "bz2", "tbz2" }),
+            new ArchiveFormatOption("TAR.XZ (*.tar.xz)", ".tar.xz", "TAR.XZ (*.tar.xz, *.txz)",
+                new String[] { ".tar.xz", ".txz" }, new String[] { "xz", "txz" }),
+            new ArchiveFormatOption("TAR.LZMA (*.tar.lzma)", ".tar.lzma", "TAR.LZMA (*.tar.lzma)",
+                new String[] { ".tar.lzma" }, new String[] { "lzma" }),
+            new ArchiveFormatOption("GZIP single-file (*.gz)", ".gz", "GZIP single-file (*.gz)",
+                new String[] { ".gz" }, new String[] { "gz" }),
+            new ArchiveFormatOption("BZIP2 single-file (*.bz2)", ".bz2", "BZIP2 single-file (*.bz2)",
+                new String[] { ".bz2" }, new String[] { "bz2" }),
+            new ArchiveFormatOption("XZ single-file (*.xz)", ".xz", "XZ single-file (*.xz)",
+                new String[] { ".xz" }, new String[] { "xz" }),
+            new ArchiveFormatOption("LZMA single-file (*.lzma)", ".lzma", "LZMA single-file (*.lzma)",
+                new String[] { ".lzma" }, new String[] { "lzma" })
     };
+
+        private static final String ALL_SUPPORTED_ARCHIVES_DESCRIPTION =
+            "All supported archives (*.zip, *.tar, *.tar.gz, *.tgz, *.tar.bz2, *.tbz2, *.tar.xz, *.txz, *.tar.lzma, *.gz, *.bz2, *.xz, *.lzma)";
 
     private final ArchiveModel model;
     private final FileOperations fileOps;
@@ -97,7 +113,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
             try {
                 clearNfsIfMounted();
                 model.openArchive(selected, readOnly);
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 showError("Open Archive", ex);
             }
         });
@@ -188,7 +204,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
             try {                
                 clearNfsIfMounted();
                 model.createArchive(selectedWithExtension);
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 showError("Create Archive", ex);
             }
         });
@@ -199,7 +215,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
         executeInBackground("Closing archive...", () -> {
             try {
                 model.closeArchive();
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 showError("Close Archive", ex);
             }
         });
@@ -216,7 +232,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 if (archiveToReopen != null) {
                     model.openArchive(archiveToReopen, false);
                 }
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 showError("Save Archive", ex);
             }
         });
@@ -424,24 +440,25 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     private void configureCreateFilter(JFileChooser chooser, ArchiveFormatOption formatOption) {
         chooser.setFileFilter(new FileNameExtensionFilter(
-                formatOption.filterDescription,
-                formatOption.extensions));
+                formatOption.label,
+                formatOption.createExtensions));
     }
 
     private void configureOpenFilters(JFileChooser chooser) {
         chooser.resetChoosableFileFilters();
-        FileNameExtensionFilter defaultFilter = null;
+
+        FileFilter allSupportedFilter = new SuffixArchiveFileFilter(
+                ALL_SUPPORTED_ARCHIVES_DESCRIPTION,
+                ".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.lzma",
+                ".gz", ".bz2", ".xz", ".lzma");
+        chooser.addChoosableFileFilter(allSupportedFilter);
+
         for (ArchiveFormatOption option : ARCHIVE_FORMAT_OPTIONS) {
-            FileNameExtensionFilter filter = new FileNameExtensionFilter(option.filterDescription, option.extensions);
+            FileFilter filter = new SuffixArchiveFileFilter(option.filterDescription, option.openSuffixes);
             chooser.addChoosableFileFilter(filter);
-            if (defaultFilter == null) {
-                defaultFilter = filter;
-            }
         }
 
-        if (defaultFilter != null) {
-            chooser.setFileFilter(defaultFilter);
-        }
+        chooser.setFileFilter(allSupportedFilter);
     }
 
     private String[] buildCreateFormatLabels() {
@@ -456,13 +473,46 @@ public final class ArchiveController implements IArchiveController, INfsControll
         private final String label;
         private final String requiredExtension;
         private final String filterDescription;
-        private final String[] extensions;
+        private final String[] openSuffixes;
+        private final String[] createExtensions;
 
-        private ArchiveFormatOption(String label, String requiredExtension, String filterDescription, String... extensions) {
+        private ArchiveFormatOption(String label, String requiredExtension, String filterDescription,
+                                    String[] openSuffixes, String[] createExtensions) {
             this.label = label;
             this.requiredExtension = requiredExtension;
             this.filterDescription = filterDescription;
-            this.extensions = extensions;
+            this.openSuffixes = openSuffixes;
+            this.createExtensions = createExtensions;
+        }
+    }
+
+    private static final class SuffixArchiveFileFilter extends FileFilter {
+        private final String description;
+        private final String[] suffixes;
+
+        private SuffixArchiveFileFilter(String description, String... suffixes) {
+            this.description = description;
+            this.suffixes = suffixes;
+        }
+
+        @Override
+        public boolean accept(File file) {
+            if (file.isDirectory()) {
+                return true;
+            }
+
+            String filename = file.getName().toLowerCase(Locale.ROOT);
+            for (String suffix : suffixes) {
+                if (filename.endsWith(suffix)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public String getDescription() {
+            return description;
         }
     private Path resolveTargetDirectory() {
         FileNode selected = model.getSelectedFile();

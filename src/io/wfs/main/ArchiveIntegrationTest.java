@@ -26,6 +26,7 @@ final class ArchiveIntegrationTest {
             singleFileRoundTrip(tempRoot.resolve("single.bz2"), "single-bz2");
             singleFileRoundTrip(tempRoot.resolve("single.xz"), "single-xz");
             singleFileRoundTrip(tempRoot.resolve("single.lzma"), "single-lzma");
+            singleFileEmptyRoundTrip(tempRoot.resolve("empty.gz"));
             System.out.println("All integration checks passed.");
         } finally {
             cleanup(tempRoot);
@@ -71,6 +72,25 @@ final class ArchiveIntegrationTest {
         }
 
         System.out.println("  [PASS] " + archivePath.getFileName());
+    }
+
+    private static void singleFileEmptyRoundTrip(Path archivePath) throws Exception {
+        ExtZipFsProvider provider = new ExtZipFsProvider();
+        URI uri = URI.create("xzip:" + archivePath.toUri() + "!/");
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of())) {
+            // Keep archive root empty; close should still succeed for single-file compressed formats.
+        }
+
+        if (!Files.exists(archivePath) || Files.size(archivePath) == 0L) {
+            throw new IllegalStateException("Empty single-file archive was not written: " + archivePath);
+        }
+
+        try (FileSystem fs = provider.newFileSystem(uri, Map.of("readOnly", "true"))) {
+            // Opening and closing should be valid even when payload is empty.
+        }
+
+        System.out.println("  [PASS] " + archivePath.getFileName() + " (empty)");
     }
 
     private static String deriveOutputName(Path archivePath) {

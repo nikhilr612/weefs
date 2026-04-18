@@ -6,7 +6,7 @@ import java.io.OutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-public final class GzipCompressionStrategy implements ICompressionStrategy {
+final class GzipCompressionStrategy implements ICompressionStrategy {
 
     @Override
     public InputStream wrapInput(InputStream input) throws IOException {
