@@ -11,10 +11,10 @@ import java.nio.file.StandardOpenOption;
 
 /**
  * Encapsulates file-level operations performed on the mounted archive.
- * Implements {@link IFileOperations} for polymorphic use by controllers.
+ * Follows the Command pattern — each method is an atomic operation.
  * All operations post errors to the EDT via dialogs.
  */
-public final class FileOperations implements IFileOperations {
+public final class FileOperations {
 
     private final ArchiveModel model;
 
@@ -25,7 +25,6 @@ public final class FileOperations implements IFileOperations {
     /**
      * Creates a new file at the given path with the supplied text content.
      */
-    @Override
     public boolean createFile(Path path, String content) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
@@ -46,7 +45,6 @@ public final class FileOperations implements IFileOperations {
     /**
      * Creates a new directory at the given path.
      */
-    @Override
     public boolean createDirectory(Path path) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
@@ -61,17 +59,16 @@ public final class FileOperations implements IFileOperations {
     }
 
     /**
-     * Deletes a file or directory at the given path.
+     * Deletes a file or empty directory.
      */
-    @Override
-    public boolean delete(Path path) {
-        if (!model.isOpen() || model.isReadOnly() || path == null)
+    public boolean delete(FileNode node) {
+        if (!model.isOpen() || model.isReadOnly() || node == null)
             return false;
         try {
-            if (Files.isDirectory(path)) {
-                deleteRecursive(path);
+            if (node.isDirectory()) {
+                deleteRecursive(node.getPath());
             } else {
-                Files.deleteIfExists(path);
+                Files.deleteIfExists(node.getPath());
             }
             model.setSelectedFile(null);
             model.fireTreeRefresh();
@@ -83,18 +80,8 @@ public final class FileOperations implements IFileOperations {
     }
 
     /**
-     * Deletes a file or empty directory represented by a FileNode.
-     */
-    public boolean delete(FileNode node) {
-        if (node == null)
-            return false;
-        return delete(node.getPath());
-    }
-
-    /**
      * Renames/moves a file or directory from oldPath to newPath.
      */
-    @Override
     public boolean rename(Path oldPath, Path newPath) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
@@ -111,7 +98,6 @@ public final class FileOperations implements IFileOperations {
     /**
      * Writes text content to an existing file.
      */
-    @Override
     public boolean saveFile(Path path, String content) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
@@ -130,7 +116,6 @@ public final class FileOperations implements IFileOperations {
      * Copies a single file at {@code sourcePath} into {@code targetDir}.
      * Directories are not supported; callers should iterate children manually.
      */
-    @Override
     public boolean copy(Path sourcePath, Path targetDir) {
         if (!model.isOpen() || model.isReadOnly())
             return false;
@@ -156,7 +141,6 @@ public final class FileOperations implements IFileOperations {
     /**
      * Extracts a file from the archive to a local directory.
      */
-    @Override
     public boolean extractTo(Path archiveFilePath, Path localDestination) {
         try {
             byte[] data = Files.readAllBytes(archiveFilePath);

@@ -7,6 +7,7 @@ import io.wfs.ui.util.FileTypeDetector;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
+import javax.swing.text.DefaultEditorKit;
 import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.io.IOException;
@@ -76,15 +77,6 @@ public final class FileContentPanel extends JPanel {
         textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         textArea.setTabSize(4);
         textArea.setLineWrap(false);
-        // Ctrl+S in editor should save the current file content, not close/reopen the whole archive.
-        KeyStroke saveKey = KeyStroke.getKeyStroke("control S");
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(saveKey, "saveCurrentFile");
-        textArea.getActionMap().put("saveCurrentFile", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                saveCurrentFile();
-            }
-        });
         JScrollPane textScroll = new JScrollPane(textArea);
         // Add line numbers
         textScroll.setRowHeaderView(new LineNumberView(textArea));
@@ -300,29 +292,19 @@ public final class FileContentPanel extends JPanel {
             g2.setFont(getFont());
 
             FontMetrics fm = g2.getFontMetrics();
+            int lineHeight = fm.getHeight();
             int ascent = fm.getAscent();
             int lines = textArea.getLineCount();
 
             Rectangle clip = g2.getClipBounds();
+            int startLine = Math.max(0, (clip.y / lineHeight));
+            int endLine = Math.min(lines, ((clip.y + clip.height) / lineHeight) + 1);
 
-            for (int i = 0; i < lines; i++) {
-                try {
-                    java.awt.geom.Rectangle2D lineRect2D = textArea.modelToView2D(textArea.getLineStartOffset(i));
-                    if (lineRect2D == null)
-                        continue;
-                    int y = (int) lineRect2D.getY();
-                    int lineH = (int) lineRect2D.getHeight();
-                    if (y + lineH < clip.y)
-                        continue;
-                    if (y > clip.y + clip.height)
-                        break;
-
-                    String num = String.valueOf(i + 1);
-                    int x = getWidth() - fm.stringWidth(num) - 6;
-                    g2.drawString(num, x, y + ascent);
-                } catch (javax.swing.text.BadLocationException ignored) {
-                    break;
-                }
+            for (int i = startLine; i < endLine; i++) {
+                String num = String.valueOf(i + 1);
+                int x = getWidth() - fm.stringWidth(num) - 6;
+                int y = (i * lineHeight) + ascent;
+                g2.drawString(num, x, y);
             }
         }
     }

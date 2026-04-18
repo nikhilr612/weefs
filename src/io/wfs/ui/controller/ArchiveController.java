@@ -1,67 +1,29 @@
 package io.wfs.ui.controller;
 
-import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.filechooser.FileFilter;
 import java.awt.*;
-import java.io.File;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.util.Locale;
 
 /**
- * Default Swing implementation of {@link IArchiveController} and
- * {@link INfsController}.
- * Coordinates between the model and views, handling high-level user actions:
- * - Archive operations: open, create, close, save
- * - NFS operations: mount, unmount, file operations
- * Delegates individual file operations to {@link FileOperations} and
- * {@link NfsFileOperations}.
+ * Default Swing implementation of {@link IArchiveController}.
+ * Coordinates between the model and views, handling high-level user
+ * actions: open, create, close, save archives.
+ * Delegates individual file operations to {@link FileOperations}.
  */
-public final class ArchiveController implements IArchiveController, INfsController {
-
-    private static final ArchiveFormatOption[] ARCHIVE_FORMAT_OPTIONS = {
-            new ArchiveFormatOption("ZIP (*.zip)", ".zip", "ZIP (*.zip)",
-                new String[] { ".zip" }, new String[] { "zip" }),
-            new ArchiveFormatOption("TAR (*.tar)", ".tar", "TAR (*.tar)",
-                new String[] { ".tar" }, new String[] { "tar" }),
-            new ArchiveFormatOption("TAR.GZ (*.tar.gz)", ".tar.gz", "TAR.GZ (*.tar.gz, *.tgz)",
-                new String[] { ".tar.gz", ".tgz" }, new String[] { "gz", "tgz" }),
-            new ArchiveFormatOption("TAR.BZ2 (*.tar.bz2)", ".tar.bz2", "TAR.BZ2 (*.tar.bz2, *.tbz2)",
-                new String[] { ".tar.bz2", ".tbz2" }, new String[] { "bz2", "tbz2" }),
-            new ArchiveFormatOption("TAR.XZ (*.tar.xz)", ".tar.xz", "TAR.XZ (*.tar.xz, *.txz)",
-                new String[] { ".tar.xz", ".txz" }, new String[] { "xz", "txz" }),
-            new ArchiveFormatOption("TAR.LZMA (*.tar.lzma)", ".tar.lzma", "TAR.LZMA (*.tar.lzma)",
-                new String[] { ".tar.lzma" }, new String[] { "lzma" }),
-            new ArchiveFormatOption("GZIP single-file (*.gz)", ".gz", "GZIP single-file (*.gz)",
-                new String[] { ".gz" }, new String[] { "gz" }),
-            new ArchiveFormatOption("BZIP2 single-file (*.bz2)", ".bz2", "BZIP2 single-file (*.bz2)",
-                new String[] { ".bz2" }, new String[] { "bz2" }),
-            new ArchiveFormatOption("XZ single-file (*.xz)", ".xz", "XZ single-file (*.xz)",
-                new String[] { ".xz" }, new String[] { "xz" }),
-            new ArchiveFormatOption("LZMA single-file (*.lzma)", ".lzma", "LZMA single-file (*.lzma)",
-                new String[] { ".lzma" }, new String[] { "lzma" })
-    };
-
-        private static final String ALL_SUPPORTED_ARCHIVES_DESCRIPTION =
-            "All supported archives (*.zip, *.tar, *.tar.gz, *.tgz, *.tar.bz2, *.tbz2, *.tar.xz, *.txz, *.tar.lzma, *.gz, *.bz2, *.xz, *.lzma)";
+public final class ArchiveController implements IArchiveController {
 
     private final ArchiveModel model;
     private final FileOperations fileOps;
-    private final NfsFileOperations nfsFileOps;
     private Component parentComponent;
-    private NfsConnectionConfig currentNfsConfig;
 
     public ArchiveController(ArchiveModel model) {
         this.model = model;
         this.fileOps = new FileOperations(model);
-        this.nfsFileOps = new NfsFileOperations(model);
     }
 
     @Override
@@ -75,8 +37,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
     }
 
     @Override
-    public IFileOperations getFileOps() {
-        return isNfsMounted() ? nfsFileOps : fileOps;
+    public FileOperations getFileOps() {
+        return fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
@@ -85,7 +47,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void openArchive() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Open Archive");
-        configureOpenFilters(chooser);
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "Archives (*.zip, *.tar)", "zip", "tar"));
         chooser.setAcceptAllFileFilterUsed(true);
 
         if (chooser.showOpenDialog(parentComponent) != JFileChooser.APPROVE_OPTION) {
@@ -111,100 +74,30 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Opening archive...", () -> {
             try {
-                clearNfsIfMounted();
                 model.openArchive(selected, readOnly);
-            } catch (Exception ex) {
+            } catch (IOException ex) {
                 showError("Open Archive", ex);
             }
         });
     }
 
     @Override
-    public void mountNfs() {
-        String value = JOptionPane.showInputDialog(parentComponent,
-                "Enter NFS URI (weefs://host/path?auth=ENV_VAR[&user=username]):",
-                "Mount NFS",
-                JOptionPane.PLAIN_MESSAGE);
-
-        if (value == null || value.isBlank()) {
-            return;
-        }
-
-        URI uri;
-        try {
-            uri = new URI(value.trim());
-        } catch (URISyntaxException ex) {
-            showError("Mount NFS", new IOException("Invalid URI: " + ex.getMessage(), ex));
-            return;
-        }
-
-        int mode = JOptionPane.showOptionDialog(parentComponent,
-                "Mount remote file system in which mode?",
-                "Mount Mode",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                new String[] { "Read/Write", "Read Only" },
-                "Read/Write");
-
-        if (mode == JOptionPane.CLOSED_OPTION) {
-            return;
-        }
-
-        boolean readOnly = (mode == 1);
-        executeInBackground("Mounting remote file system...", () -> {
-            try {
-                model.openMountUri(uri, readOnly);
-            } catch (IOException ex) {
-                showError("Mount NFS", ex);
-            }
-        });
-    }
-
-    @Override
     public void createArchive() {
-        String[] labels = buildCreateFormatLabels();
-        String selectedLabel = (String) JOptionPane.showInputDialog(
-                parentComponent,
-                "Choose archive format:",
-                "Archive Type",
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                labels,
-                labels[0]);
-
-        if (selectedLabel == null) {
-            return;
-        }
-
-        ArchiveFormatOption selectedFormat = null;
-        for (ArchiveFormatOption option : ARCHIVE_FORMAT_OPTIONS) {
-            if (option.label.equals(selectedLabel)) {
-                selectedFormat = option;
-                break;
-            }
-        }
-        if (selectedFormat == null) {
-            selectedFormat = ARCHIVE_FORMAT_OPTIONS[0];
-        }
-
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Create New Archive");
-        configureCreateFilter(chooser, selectedFormat);
-        chooser.setAcceptAllFileFilterUsed(false);
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "Archives (*.zip, *.tar)", "zip", "tar"));
 
         if (chooser.showSaveDialog(parentComponent) != JFileChooser.APPROVE_OPTION) {
             return;
         }
 
         Path selected = chooser.getSelectedFile().toPath().toAbsolutePath().normalize();
-        Path selectedWithExtension = ensureArchiveExtension(selected, selectedFormat.requiredExtension);
 
         executeInBackground("Creating archive...", () -> {
-            try {                
-                clearNfsIfMounted();
-                model.createArchive(selectedWithExtension);
-            } catch (Exception ex) {
+            try {
+                model.createArchive(selected);
+            } catch (IOException ex) {
                 showError("Create Archive", ex);
             }
         });
@@ -215,7 +108,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
         executeInBackground("Closing archive...", () -> {
             try {
                 model.closeArchive();
-            } catch (Exception ex) {
+            } catch (IOException ex) {
                 showError("Close Archive", ex);
             }
         });
@@ -225,14 +118,13 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void saveArchive() {
         if (!model.isOpen() || model.isReadOnly())
             return;
+        Path archivePath = model.getArchivePath();
+        boolean wasReadOnly = model.isReadOnly();
         executeInBackground("Saving archive...", () -> {
             try {
-                Path archiveToReopen = model.getArchivePath();
                 model.closeArchive();
-                if (archiveToReopen != null) {
-                    model.openArchive(archiveToReopen, false);
-                }
-            } catch (Exception ex) {
+                model.openArchive(archivePath, wasReadOnly);
+            } catch (IOException ex) {
                 showError("Save Archive", ex);
             }
         });
@@ -244,8 +136,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void newFile() {
         if (!model.isOpen() || model.isReadOnly())
             return;
-
-        Path parentDir = resolveTargetDirectory();
+        FileNode selected = model.getSelectedFile();
+        Path parentDir = getTargetDirectory(selected);
         if (parentDir == null)
             return;
 
@@ -254,15 +146,16 @@ public final class ArchiveController implements IArchiveController, INfsControll
         if (name == null || name.isBlank())
             return;
 
-        getFileOps().createFile(parentDir.resolve(name), "");
+        Path filePath = parentDir.resolve(name);
+        fileOps.createFile(filePath, "");
     }
 
     @Override
     public void newDirectory() {
         if (!model.isOpen() || model.isReadOnly())
             return;
-
-        Path parentDir = resolveTargetDirectory();
+        FileNode selected = model.getSelectedFile();
+        Path parentDir = getTargetDirectory(selected);
         if (parentDir == null)
             return;
 
@@ -271,7 +164,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
         if (name == null || name.isBlank())
             return;
 
-        getFileOps().createDirectory(parentDir.resolve(name));
+        Path dirPath = parentDir.resolve(name);
+        fileOps.createDirectory(dirPath);
     }
 
     @Override
@@ -287,7 +181,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 JOptionPane.WARNING_MESSAGE);
 
         if (confirm == JOptionPane.YES_OPTION) {
-            getFileOps().delete(selected.getPath());
+            fileOps.delete(selected);
         }
     }
 
@@ -307,7 +201,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
         if (parent == null)
             return;
 
-        getFileOps().rename(oldPath, parent.resolve(newName));
+        Path newPath = parent.resolve(newName);
+        fileOps.rename(oldPath, newPath);
     }
 
     @Override
@@ -322,75 +217,13 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         if (chooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
             Path destination = chooser.getSelectedFile().toPath();
-            getFileOps().extractTo(selected.getPath(), destination);
+            fileOps.extractTo(selected.getPath(), destination);
         }
     }
 
     @Override
     public void saveFileContent(Path path, String content) {
-        getFileOps().saveFile(path, content);
-    }
-
-    // ── NFS operations (INfsController implementation) ───────────────────
-
-    @Override
-    public NfsFileOperations getNfsFileOps() {
-        return nfsFileOps;
-    }
-
-    @Override
-    public void unmountNfs() {
-        if (currentNfsConfig == null) {
-            return;
-        }
-
-        executeInBackground("Unmounting NFS...", () -> {
-            try {
-                currentNfsConfig = null;
-                nfsFileOps.setConfig(null);
-                model.setNfsConfig(null);
-                model.fireTreeRefresh();
-            } catch (Exception ex) {
-                showError("Unmount NFS", ex);
-            }
-        });
-    }
-
-    @Override
-    public void extractNfsSelected() {
-        if (!isNfsMounted() || model.getSelectedFile() == null || model.getSelectedFile().isDirectory()) {
-            return;
-        }
-
-        FileNode selected = model.getSelectedFile();
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Extract NFS File To...");
-        chooser.setSelectedFile(new java.io.File(selected.getDisplayName()));
-
-        if (chooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
-            Path destination = chooser.getSelectedFile().toPath();
-            executeInBackground("Extracting file...", () -> {
-                try {
-                    nfsFileOps.extractTo(currentNfsConfig, selected.getPath().toString(), destination);
-                    JOptionPane.showMessageDialog(parentComponent,
-                            "File extracted successfully",
-                            "Success",
-                            JOptionPane.INFORMATION_MESSAGE);
-                } catch (Exception ex) {
-                    showError("Extract NFS File", ex);
-                }
-            });
-        }
-    }
-
-    @Override
-    public NfsConnectionConfig getCurrentNfsConfig() {
-        return currentNfsConfig;
-    }
-
-    @Override
-    public boolean isNfsMounted() {
-        return currentNfsConfig != null;
+        fileOps.saveFile(path, content);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
@@ -403,120 +236,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
             return selected.getPath().getParent();
         }
         return model.getRootPath();
-    }
-
-    private Path ensureArchiveExtension(Path selected, String requiredExtension) {
-        String filename = selected.getFileName().toString();
-        String normalized = stripSupportedArchiveExtension(filename);
-        if (!normalized.endsWith(requiredExtension)) {
-            normalized = normalized + requiredExtension;
-        }
-        return selected.resolveSibling(normalized);
-    }
-
-    private String stripSupportedArchiveExtension(String filename) {
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".tar.gz")) {
-            return filename.substring(0, filename.length() - 7);
-        }
-        if (lower.endsWith(".tar.bz2")) {
-            return filename.substring(0, filename.length() - 8);
-        }
-        if (lower.endsWith(".tar.xz")) {
-            return filename.substring(0, filename.length() - 7);
-        }
-        if (lower.endsWith(".tar.lzma")) {
-            return filename.substring(0, filename.length() - 9);
-        }
-        if (lower.endsWith(".tgz") || lower.endsWith(".tbz2") || lower.endsWith(".txz")) {
-            return filename.substring(0, filename.lastIndexOf('.'));
-        }
-        if (lower.endsWith(".zip") || lower.endsWith(".tar") || lower.endsWith(".gz")
-                || lower.endsWith(".bz2") || lower.endsWith(".xz") || lower.endsWith(".lzma")) {
-            return filename.substring(0, filename.lastIndexOf('.'));
-        }
-        return filename;
-    }
-
-    private void configureCreateFilter(JFileChooser chooser, ArchiveFormatOption formatOption) {
-        chooser.setFileFilter(new FileNameExtensionFilter(
-                formatOption.label,
-                formatOption.createExtensions));
-    }
-
-    private void configureOpenFilters(JFileChooser chooser) {
-        chooser.resetChoosableFileFilters();
-
-        FileFilter allSupportedFilter = new SuffixArchiveFileFilter(
-                ALL_SUPPORTED_ARCHIVES_DESCRIPTION,
-                ".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.lzma",
-                ".gz", ".bz2", ".xz", ".lzma");
-        chooser.addChoosableFileFilter(allSupportedFilter);
-
-        for (ArchiveFormatOption option : ARCHIVE_FORMAT_OPTIONS) {
-            FileFilter filter = new SuffixArchiveFileFilter(option.filterDescription, option.openSuffixes);
-            chooser.addChoosableFileFilter(filter);
-        }
-
-        chooser.setFileFilter(allSupportedFilter);
-    }
-
-    private String[] buildCreateFormatLabels() {
-        String[] labels = new String[ARCHIVE_FORMAT_OPTIONS.length];
-        for (int i = 0; i < ARCHIVE_FORMAT_OPTIONS.length; i++) {
-            labels[i] = ARCHIVE_FORMAT_OPTIONS[i].label;
-        }
-        return labels;
-    }
-
-    private static final class ArchiveFormatOption {
-        private final String label;
-        private final String requiredExtension;
-        private final String filterDescription;
-        private final String[] openSuffixes;
-        private final String[] createExtensions;
-
-        private ArchiveFormatOption(String label, String requiredExtension, String filterDescription,
-                                    String[] openSuffixes, String[] createExtensions) {
-            this.label = label;
-            this.requiredExtension = requiredExtension;
-            this.filterDescription = filterDescription;
-            this.openSuffixes = openSuffixes;
-            this.createExtensions = createExtensions;
-        }
-    }
-
-    private static final class SuffixArchiveFileFilter extends FileFilter {
-        private final String description;
-        private final String[] suffixes;
-
-        private SuffixArchiveFileFilter(String description, String... suffixes) {
-            this.description = description;
-            this.suffixes = suffixes;
-        }
-
-        @Override
-        public boolean accept(File file) {
-            if (file.isDirectory()) {
-                return true;
-            }
-
-            String filename = file.getName().toLowerCase(Locale.ROOT);
-            for (String suffix : suffixes) {
-                if (filename.endsWith(suffix)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public String getDescription() {
-            return description;
-        }
-    private Path resolveTargetDirectory() {
-        FileNode selected = model.getSelectedFile();
-        return getTargetDirectory(selected);
     }
 
     private void executeInBackground(String message, Runnable task) {
@@ -535,16 +254,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 if (parentComponent != null) {
                     parentComponent.setCursor(java.awt.Cursor.getDefaultCursor());
                 }
-                try {
-                    get(); // Surface any exceptions from doInBackground
-                } catch (java.util.concurrent.ExecutionException ex) {
-                    Throwable cause = ex.getCause();
-                    if (cause instanceof Exception) {
-                        showError(message, (Exception) cause);
-                    }
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                }
             }
         };
         worker.execute();
@@ -554,13 +263,5 @@ public final class ArchiveController implements IArchiveController, INfsControll
         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(parentComponent,
                 operation + " failed:\n" + ex.getMessage(),
                 "Error", JOptionPane.ERROR_MESSAGE));
-    }
-
-    private void clearNfsIfMounted() throws IOException {
-        if (currentNfsConfig != null || model.isNfsMounted()) {
-            currentNfsConfig = null;
-            nfsFileOps.setConfig(null);
-            model.setNfsConfig(null);
-        }
     }
 }

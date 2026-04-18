@@ -1,15 +1,11 @@
 package io.wfs.ui.model;
 
-import io.wfs.core.filesystem.FileSystemFactory;
-import io.wfs.core.nfs.NfsConnectionConfig;
-import io.wfs.core.nfs.NfsFileInfo;
-import io.wfs.core.nfs.NfsIO;
+import io.wfs.core.extractor.ExtZipFsProvider;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -28,17 +24,15 @@ import javax.swing.SwingUtilities;
 public final class ArchiveModel {
 
     public static final String PROP_ARCHIVE_PATH = "archivePath";
-    public static final String PROP_NFS_CONFIG = "nfsConfig";
     public static final String PROP_OPEN = "open";
     public static final String PROP_READ_ONLY = "readOnly";
     public static final String PROP_SELECTED_FILE = "selectedFile";
     public static final String PROP_TREE_REFRESH = "treeRefresh";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
-    private final FileSystemFactory fileSystemFactory = new FileSystemFactory();
+    private final ExtZipFsProvider provider = new ExtZipFsProvider();
 
     private Path archivePath;
-    private NfsConnectionConfig nfsConfig;
     private FileSystem fileSystem;
     private boolean readOnly;
     private FileNode selectedFile;
@@ -56,41 +50,25 @@ public final class ArchiveModel {
     }
 
     /**
-     * Opens an archive at the given local path.
-     * Supported formats include ZIP, TAR, TAR+compression, and single-file compressed streams.
+     * Opens an archive (ZIP or TAR) at the given local path.
      * If an archive is already open, it is closed first.
      */
     public void openArchive(Path archive, boolean readOnly) throws IOException {
-        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
-        openMountUri(uri, readOnly, archive);
-    }
-
-    /**
-     * Mounts a URI-based file system, including weefs:// remotes.
-     */
-    public void openMountUri(URI uri, boolean readOnly) throws IOException {
-        Path displayPath = Path.of(uri.getHost() == null
-                ? uri.toString()
-                : uri.getHost() + uri.getPath());
-        openMountUri(uri, readOnly, displayPath);
-    }
-
-    private void openMountUri(URI uri, boolean readOnly, Path displayPath) throws IOException {
         closeArchive();
 
         boolean previousReadOnly = this.readOnly;
         this.readOnly = readOnly;
         Path oldPath = this.archivePath;
-        this.archivePath = displayPath;
-        this.nfsConfig = null;
+        this.archivePath = archive;
 
+        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
         Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
-        this.fileSystem = fileSystemFactory.open(uri, env);
+        this.fileSystem = provider.newFileSystem(uri, env);
 
         final Path finalOldPath = oldPath;
         final boolean finalPreviousReadOnly = previousReadOnly;
         fireOnEdt(() -> {
-            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, displayPath);
+            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, archive);
             pcs.firePropertyChange(PROP_OPEN, false, true);
             if (previousReadOnly != readOnly) {
                 pcs.firePropertyChange(PROP_READ_ONLY, finalPreviousReadOnly, readOnly);
@@ -120,7 +98,6 @@ public final class ArchiveModel {
             fileSystem.close();
         }
         fileSystem = null;
-        nfsConfig = null;
         Path oldPath = archivePath;
         archivePath = null;
         selectedFile = null;
@@ -135,7 +112,7 @@ public final class ArchiveModel {
     }
 
     public boolean isOpen() {
-        return (fileSystem != null && fileSystem.isOpen()) || isNfsMounted();
+        return fileSystem != null && fileSystem.isOpen();
     }
 
     public boolean isReadOnly() {
@@ -150,46 +127,10 @@ public final class ArchiveModel {
         return fileSystem;
     }
 
-    public void setNfsConfig(NfsConnectionConfig config) throws IOException {
-        if (fileSystem != null) {
-            closeArchive();
-        }
-
-        NfsConnectionConfig oldConfig = this.nfsConfig;
-        this.nfsConfig = config;
-        this.selectedFile = null;
-
-        if (config != null) {
-            this.readOnly = config.isReadOnly();
-            fireOnEdt(() -> {
-                pcs.firePropertyChange(PROP_OPEN, false, true);
-                pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
-                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
-            });
-        } else {
-            this.readOnly = false;
-            fireOnEdt(() -> {
-                pcs.firePropertyChange(PROP_OPEN, true, false);
-                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, null);
-            });
-        }
-    }
-
-    public NfsConnectionConfig getNfsConfig() {
-        return nfsConfig;
-    }
-
-    public boolean isNfsMounted() {
-        return nfsConfig != null;
-    }
-
     /**
      * Returns the root path inside the mounted archive.
      */
     public Path getRootPath() {
-        if (isNfsMounted()) {
-            return Path.of("/");
-        }
         if (!isOpen()) {
             return null;
         }
@@ -202,17 +143,6 @@ public final class ArchiveModel {
     public List<FileNode> listChildren(Path directory) throws IOException {
         if (!isOpen()) {
             return Collections.emptyList();
-        }
-
-        if (isNfsMounted()) {
-            List<NfsFileInfo> nfsChildren = NfsIO.listDirectory(nfsConfig, directory.toString());
-            List<FileNode> children = new ArrayList<>();
-            for (NfsFileInfo child : nfsChildren) {
-                String remotePath = joinRemotePath(directory.toString(), child.getName());
-                children.add(new FileNode(Path.of(remotePath), child.getName(), child.isDirectory()));
-            }
-            Collections.sort(children);
-            return children;
         }
         List<FileNode> children = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
@@ -254,9 +184,6 @@ public final class ArchiveModel {
      * Reads the text content of a file in the archive.
      */
     public String readFileContent(Path path) throws IOException {
-        if (isNfsMounted()) {
-            return new String(NfsIO.readFile(nfsConfig, path.toString()), StandardCharsets.UTF_8);
-        }
         return Files.readString(path);
     }
 
@@ -264,16 +191,6 @@ public final class ArchiveModel {
      * Reads the raw bytes of a file in the archive.
      */
     public byte[] readFileBytes(Path path) throws IOException {
-        if (isNfsMounted()) {
-            return NfsIO.readFile(nfsConfig, path.toString());
-        }
         return Files.readAllBytes(path);
-    }
-
-    private static String joinRemotePath(String parent, String childName) {
-        if (parent == null || parent.isBlank() || "/".equals(parent)) {
-            return "/" + childName;
-        }
-        return parent.endsWith("/") ? parent + childName : parent + "/" + childName;
     }
 }

@@ -93,8 +93,8 @@ final class ExtZipFileSystem extends FileSystem {
             if (!readOnly) {
                 ExtZipFsIO.writeDirectoryToArchive(tempRoot, archivePath);
             }
-        } catch (Exception ex) {
-            failure = asIoException(ex);
+        } catch (IOException ex) {
+            failure = ex;
         }
 
         try {
@@ -193,12 +193,5 @@ final class ExtZipFileSystem extends FileSystem {
         } catch (IOException ignored) {
             // Best effort on shutdown.
         }
-    }
-
-    private IOException asIoException(Exception ex) {
-        if (ex instanceof IOException ioEx) {
-            return ioEx;
-        }
-        return new IOException("Failed to persist archive: " + ex.getMessage(), ex);
     }
 }
