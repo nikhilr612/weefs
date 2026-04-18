@@ -1,6 +1,6 @@
 package io.wfs.ui.model;
 
-import io.wfs.core.extractor.ExtZipFsProvider;
+import io.wfs.core.filesystem.FileSystemFactory;
 import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.core.nfs.NfsFileInfo;
 import io.wfs.core.nfs.NfsIO;
@@ -21,10 +21,9 @@ import java.util.Map;
 import javax.swing.SwingUtilities;
 
 /**
- * Central model for the archive/NFS browser.
- * Manages the currently mounted archive FileSystem or NFS connection and fires
+ * Central model for the archive browser.
+ * Manages the currently mounted archive FileSystem and fires
  * property-change events so views can react (Observer pattern).
- * Supports both archive (ZIP/TAR) and NFS (Network File System) mounting.
  */
 public final class ArchiveModel {
 
@@ -36,7 +35,7 @@ public final class ArchiveModel {
     public static final String PROP_TREE_REFRESH = "treeRefresh";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
-    private final ExtZipFsProvider provider = new ExtZipFsProvider();
+    private final FileSystemFactory fileSystemFactory = new FileSystemFactory();
 
     private Path archivePath;
     private NfsConnectionConfig nfsConfig;
@@ -61,21 +60,36 @@ public final class ArchiveModel {
      * If an archive is already open, it is closed first.
      */
     public void openArchive(Path archive, boolean readOnly) throws IOException {
+        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
+        openMountUri(uri, readOnly, archive);
+    }
+
+    /**
+     * Mounts a URI-based file system, including weefs:// remotes.
+     */
+    public void openMountUri(URI uri, boolean readOnly) throws IOException {
+        Path displayPath = Path.of(uri.getHost() == null
+                ? uri.toString()
+                : uri.getHost() + uri.getPath());
+        openMountUri(uri, readOnly, displayPath);
+    }
+
+    private void openMountUri(URI uri, boolean readOnly, Path displayPath) throws IOException {
         closeArchive();
 
         boolean previousReadOnly = this.readOnly;
         this.readOnly = readOnly;
         Path oldPath = this.archivePath;
-        this.archivePath = archive;
+        this.archivePath = displayPath;
+        this.nfsConfig = null;
 
-        URI uri = URI.create("xzip:" + archive.toUri() + "!/");
         Map<String, String> env = readOnly ? Map.of("readOnly", "true") : Map.of();
-        this.fileSystem = provider.newFileSystem(uri, env);
+        this.fileSystem = fileSystemFactory.open(uri, env);
 
         final Path finalOldPath = oldPath;
         final boolean finalPreviousReadOnly = previousReadOnly;
         fireOnEdt(() -> {
-            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, archive);
+            pcs.firePropertyChange(PROP_ARCHIVE_PATH, finalOldPath, displayPath);
             pcs.firePropertyChange(PROP_OPEN, false, true);
             if (previousReadOnly != readOnly) {
                 pcs.firePropertyChange(PROP_READ_ONLY, finalPreviousReadOnly, readOnly);
@@ -105,6 +119,7 @@ public final class ArchiveModel {
             fileSystem.close();
         }
         fileSystem = null;
+        nfsConfig = null;
         Path oldPath = archivePath;
         archivePath = null;
         selectedFile = null;
@@ -118,11 +133,23 @@ public final class ArchiveModel {
         }
     }
 
-    /**
-     * Sets the NFS configuration for the currently mounted NFS share.
-     */
+    public boolean isOpen() {
+        return (fileSystem != null && fileSystem.isOpen()) || isNfsMounted();
+    }
+
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+
+    public Path getArchivePath() {
+        return archivePath;
+    }
+
+    public FileSystem getFileSystem() {
+        return fileSystem;
+    }
+
     public void setNfsConfig(NfsConnectionConfig config) throws IOException {
-        // Close archive if one is open
         if (fileSystem != null) {
             closeArchive();
         }
@@ -147,34 +174,12 @@ public final class ArchiveModel {
         }
     }
 
-    /**
-     * Gets the current NFS configuration.
-     */
     public NfsConnectionConfig getNfsConfig() {
         return nfsConfig;
     }
 
-    /**
-     * Checks if an NFS share is currently mounted.
-     */
     public boolean isNfsMounted() {
         return nfsConfig != null;
-    }
-
-    public boolean isOpen() {
-        return (fileSystem != null && fileSystem.isOpen()) || isNfsMounted();
-    }
-
-    public boolean isReadOnly() {
-        return readOnly;
-    }
-
-    public Path getArchivePath() {
-        return archivePath;
-    }
-
-    public FileSystem getFileSystem() {
-        return fileSystem;
     }
 
     /**
@@ -208,7 +213,6 @@ public final class ArchiveModel {
             Collections.sort(children);
             return children;
         }
-
         List<FileNode> children = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
             for (Path entry : stream) {
@@ -217,16 +221,6 @@ public final class ArchiveModel {
         }
         Collections.sort(children);
         return children;
-    }
-
-    /**
-     * Returns children for NFS directory.
-     */
-    public List<NfsFileInfo> listNfsChildren(String remotePath) throws IOException {
-        if (!isNfsMounted()) {
-            return Collections.emptyList();
-        }
-        return NfsIO.listDirectory(nfsConfig, remotePath);
     }
 
     public FileNode getSelectedFile() {

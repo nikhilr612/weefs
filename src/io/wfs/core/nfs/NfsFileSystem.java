@@ -5,64 +5,117 @@ import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileSystems;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.UserPrincipalLookupService;
 import java.nio.file.spi.FileSystemProvider;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * NFS-backed FileSystem implementation extending the standard FileSystem SPI.
- * Provides NFS access through Java NIO.2 interfaces (Adapter pattern).
- * Manages connection state and delegates I/O to NfsIO utility class.
- */
 final class NfsFileSystem extends FileSystem {
 
-    private final NfsFsProvider provider;
-    private final NfsConnectionConfig config;
+    private final FileSystemProvider provider;
+    private final NfsSftpFsProvider sftpProvider;
+    private final NfsSftpConfig config;
+    private final NfsConnectionConfig legacyConfig;
+    private final boolean readOnly;
     private final AtomicBoolean open;
     private volatile Thread shutdownHook;
 
+    NfsFileSystem(NfsSftpFsProvider provider, NfsSftpConfig config, boolean readOnly) {
+        this.provider = provider;
+        this.sftpProvider = provider;
+        this.config = config;
+        this.legacyConfig = null;
+        this.readOnly = readOnly;
+        this.open = new AtomicBoolean(true);
+    }
+
     NfsFileSystem(NfsFsProvider provider, NfsConnectionConfig config) {
         this.provider = provider;
-        this.config = config;
+        this.sftpProvider = null;
+        this.config = null;
+        this.legacyConfig = config;
+        this.readOnly = config.isReadOnly();
         this.open = new AtomicBoolean(true);
     }
 
     void installShutdownHook() {
-        shutdownHook = new Thread(
-                this::closeQuietly,
-                "nfs-shutdown-" + config.getHost() + "_" + config.getPort()
-        );
+        String host = config != null ? config.host() : legacyConfig.getHost();
+        shutdownHook = new Thread(this::closeQuietly, "weefs-sftp-shutdown-" + host);
         try {
             Runtime.getRuntime().addShutdownHook(shutdownHook);
         } catch (IllegalStateException ignored) {
-            // Shutdown already started
+            // JVM is already shutting down.
         }
     }
 
-    NfsConnectionConfig getConfig() {
+    NfsSftpConfig config() {
+        if (config == null) {
+            throw new IllegalStateException("SFTP config unavailable for legacy NFS file system");
+        }
         return config;
     }
 
-    NfsPath wrap(String pathStr) {
-        return new NfsPath(this, pathStr);
+    boolean hasSftpConfig() {
+        return config != null;
     }
 
-    void ensureOpen() {
-        if (!isOpen()) {
-            throw new FileSystemNotFoundException("NFS file system is closed: " + config);
+    NfsConnectionConfig getConfig() {
+        if (legacyConfig != null) {
+            return legacyConfig;
         }
+        return new NfsConnectionConfig(
+                config.host(),
+                config.port(),
+                config.remoteRoot(),
+                config.remoteRoot(),
+                30,
+                readOnly);
+    }
+
+    String toRemotePath(NfsPath path) {
+        if (config == null) {
+            return path.toString();
+        }
+        String virtual = path.toString();
+        if ("/".equals(virtual)) {
+            return config.remoteRoot();
+        }
+        String suffix = virtual.startsWith("/") ? virtual.substring(1) : virtual;
+        return NfsSftpFsIO.join(config.remoteRoot(), suffix);
     }
 
     void ensureWritable() {
+        if (readOnly) {
+            String host = config != null ? config.host() : legacyConfig.getHost();
+            throw new UnsupportedOperationException("File system is read-only: " + host);
+        }
         ensureOpen();
-        if (isReadOnly()) {
-            throw new UnsupportedOperationException("NFS mount is read-only: " + config);
+    }
+
+    void ensureWritableFor(Set<? extends OpenOption> options) {
+        ensureOpen();
+        if (!readOnly || options == null) {
+            return;
+        }
+        for (OpenOption option : options) {
+            String name = String.valueOf(option).toUpperCase();
+                if (name.contains("WRITE") || name.contains("APPEND") || name.contains("CREATE")
+                        || name.contains("TRUNCATE") || name.contains("DELETE")) {
+                    String host = config != null ? config.host() : legacyConfig.getHost();
+                    throw new UnsupportedOperationException("File system is read-only: " + host);
+                }
+            }
+        }
+
+    void ensureOpen() {
+        if (!isOpen()) {
+            String host = config != null ? config.host() : legacyConfig.getHost();
+            throw new FileSystemNotFoundException("File system is closed: " + host);
         }
     }
 
@@ -76,15 +129,20 @@ final class NfsFileSystem extends FileSystem {
         if (!open.compareAndSet(true, false)) {
             return;
         }
-        try {
-            NfsIO.disconnect(config);
-        } finally {
-            if (shutdownHook != null) {
-                try {
-                    Runtime.getRuntime().removeShutdownHook(shutdownHook);
-                } catch (IllegalStateException ignored) {
-                    // Shutdown already in progress
-                }
+
+        if (sftpProvider != null) {
+            sftpProvider.unregister(this);
+        }
+        if (legacyConfig != null) {
+            NfsIO.disconnect(legacyConfig);
+        }
+
+        Thread hook = shutdownHook;
+        if (hook != null && hook != Thread.currentThread()) {
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook);
+            } catch (IllegalStateException ignored) {
+                // Shutdown in progress.
             }
         }
     }
@@ -96,7 +154,7 @@ final class NfsFileSystem extends FileSystem {
 
     @Override
     public boolean isReadOnly() {
-        return config.isReadOnly();
+        return readOnly;
     }
 
     @Override
@@ -106,48 +164,52 @@ final class NfsFileSystem extends FileSystem {
 
     @Override
     public Iterable<Path> getRootDirectories() {
-        return Collections.singletonList(new NfsPath(this, "/"));
+        return List.of(new NfsPath(this, "/"));
     }
 
     @Override
     public Iterable<FileStore> getFileStores() {
-        return Collections.emptyList();
+        return List.of();
     }
 
     @Override
     public Set<String> supportedFileAttributeViews() {
-        return Collections.emptySet();
+        return Set.of("basic");
     }
 
     @Override
     public Path getPath(String first, String... more) {
-        StringBuilder sb = new StringBuilder(first);
-        for (String part : more) {
-            sb.append("/").append(part);
+        String joined = Path.of(first, more).toString().replace('\\', '/');
+        if (joined.isBlank() || "/".equals(joined)) {
+            return new NfsPath(this, "/");
         }
-        return wrap(sb.toString());
+
+        String normalized = joined.startsWith("/") ? joined : "/" + joined;
+        normalized = NfsSftpFsIO.normalizeRemotePath(normalized);
+        return new NfsPath(this, normalized);
     }
 
     @Override
     public PathMatcher getPathMatcher(String syntaxAndPattern) {
-        return FileSystems.getDefault().getPathMatcher(syntaxAndPattern);
+        PathMatcher matcher = FileSystems.getDefault().getPathMatcher(syntaxAndPattern);
+        return path -> matcher.matches(Path.of(path.toString().replace('\\', '/')));
     }
 
     @Override
     public UserPrincipalLookupService getUserPrincipalLookupService() {
-        return FileSystems.getDefault().getUserPrincipalLookupService();
+        throw new UnsupportedOperationException("User principal lookup is not supported for weefs SFTP");
     }
 
     @Override
     public WatchService newWatchService() throws IOException {
-        throw new UnsupportedOperationException("Watch service not supported for NFS");
+        throw new UnsupportedOperationException("Watch service is not supported for weefs SFTP");
     }
 
     private void closeQuietly() {
         try {
             close();
         } catch (IOException ignored) {
-            // Cleanup during shutdown
+            // Best effort cleanup.
         }
     }
 }

@@ -8,6 +8,8 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 
 /**
@@ -85,6 +87,48 @@ public final class ArchiveController implements IArchiveController, INfsControll
                 model.openArchive(selected, readOnly);
             } catch (IOException ex) {
                 showError("Open Archive", ex);
+            }
+        });
+    }
+
+    @Override
+    public void mountNfs() {
+        String value = JOptionPane.showInputDialog(parentComponent,
+                "Enter NFS URI (weefs://host/path?auth=ENV_VAR[&user=username]):",
+                "Mount NFS",
+                JOptionPane.PLAIN_MESSAGE);
+
+        if (value == null || value.isBlank()) {
+            return;
+        }
+
+        URI uri;
+        try {
+            uri = new URI(value.trim());
+        } catch (URISyntaxException ex) {
+            showError("Mount NFS", new IOException("Invalid URI: " + ex.getMessage(), ex));
+            return;
+        }
+
+        int mode = JOptionPane.showOptionDialog(parentComponent,
+                "Mount remote file system in which mode?",
+                "Mount Mode",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new String[] { "Read/Write", "Read Only" },
+                "Read/Write");
+
+        if (mode == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+
+        boolean readOnly = (mode == 1);
+        executeInBackground("Mounting remote file system...", () -> {
+            try {
+                model.openMountUri(uri, readOnly);
+            } catch (IOException ex) {
+                showError("Mount NFS", ex);
             }
         });
     }
@@ -237,32 +281,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
     @Override
     public NfsFileOperations getNfsFileOps() {
         return nfsFileOps;
-    }
-
-    @Override
-    public void mountNfs() {
-        // Show dialog to get NFS connection details
-        NfsConnectionDialog dialog = new NfsConnectionDialog(parentComponent);
-        NfsConnectionConfig config = dialog.showDialog();
-
-        if (config == null) {
-            return; // User cancelled
-        }
-
-        executeInBackground("Mounting NFS...", () -> {
-            try {
-                currentNfsConfig = config;
-                nfsFileOps.setConfig(config);
-                model.setNfsConfig(config);
-                model.fireTreeRefresh(); // ← FIX: Refresh tree to show NFS contents
-                JOptionPane.showMessageDialog(parentComponent,
-                        "NFS mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath(),
-                        "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception ex) {
-                showError("Mount NFS", ex);
-            }
-        });
     }
 
     @Override
