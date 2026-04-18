@@ -108,6 +108,12 @@ public final class MenuBarFactory {
         JMenu menu = new JMenu("NFS");
         menu.setMnemonic(KeyEvent.VK_N);
 
+        if (!(controller instanceof INfsController)) {
+            JMenuItem disabled = new JMenuItem("NFS not available");
+            disabled.setEnabled(false);
+            menu.add(disabled);
+            return menu;
+        }
         INfsController nfsController = (INfsController) controller;
 
         JMenuItem mountNfs = new JMenuItem("Mount NFS...");

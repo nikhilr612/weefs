@@ -133,10 +133,11 @@ public final class ArchiveModel {
         this.selectedFile = null;
 
         if (config != null) {
+            final boolean previousReadOnly = this.readOnly;
             this.readOnly = config.isReadOnly();
             fireOnEdt(() -> {
                 pcs.firePropertyChange(PROP_OPEN, false, true);
-                pcs.firePropertyChange(PROP_READ_ONLY, !readOnly, readOnly);
+                pcs.firePropertyChange(PROP_READ_ONLY, previousReadOnly, readOnly);
                 pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
             });
         } else {

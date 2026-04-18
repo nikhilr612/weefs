@@ -24,7 +24,8 @@ public final class ToolBarFactory {
         toolBar.setRollover(true);
         toolBar.setBorderPainted(true);
 
-        INfsController nfsController = (INfsController) controller;
+        final INfsController nfsController = (controller instanceof INfsController)
+                ? (INfsController) controller : null;
 
         // Archive operations
         JButton openBtn = makeButton("Open", IconFactory.archiveIcon(), "Open an archive (Ctrl+O)");
@@ -44,10 +45,11 @@ public final class ToolBarFactory {
 
         // NFS operations
         JButton mountNfsBtn = makeButton("Mount NFS", IconFactory.folderIcon(), "Mount NFS share (Ctrl+Shift+M)");
-        mountNfsBtn.addActionListener(e -> nfsController.mountNfs());
+        mountNfsBtn.addActionListener(e -> { if (nfsController != null) nfsController.mountNfs(); });
+        mountNfsBtn.setEnabled(nfsController != null);
 
         JButton unmountNfsBtn = makeButton("Unmount NFS", null, "Unmount NFS share (Ctrl+Shift+U)");
-        unmountNfsBtn.addActionListener(e -> nfsController.unmountNfs());
+        unmountNfsBtn.addActionListener(e -> { if (nfsController != null) nfsController.unmountNfs(); });
         unmountNfsBtn.setEnabled(false);
 
         toolBar.add(mountNfsBtn);
@@ -72,7 +74,7 @@ public final class ToolBarFactory {
         extractBtn.setEnabled(false);
 
         JButton extractNfsBtn = makeButton("Extract NFS", null, "Extract NFS file to disk");
-        extractNfsBtn.addActionListener(e -> nfsController.extractNfsSelected());
+        extractNfsBtn.addActionListener(e -> { if (nfsController != null) nfsController.extractNfsSelected(); });
         extractNfsBtn.setEnabled(false);
 
         toolBar.add(newFileBtn);
@@ -96,10 +98,10 @@ public final class ToolBarFactory {
             var selectedFile = model.getSelectedFile();
             boolean hasSel = selectedFile != null;
             boolean isDirectory = hasSel && selectedFile.isDirectory();
-            boolean nfsMounted = nfsController.isNfsMounted();
+            boolean nfsMounted = nfsController != null && nfsController.isNfsMounted();
 
             closeBtn.setEnabled(isOpen);
-            mountNfsBtn.setEnabled(!nfsMounted);
+            mountNfsBtn.setEnabled(nfsController != null && !nfsMounted);
             unmountNfsBtn.setEnabled(nfsMounted);
             newFileBtn.setEnabled(canEdit);
             newDirBtn.setEnabled(canEdit);

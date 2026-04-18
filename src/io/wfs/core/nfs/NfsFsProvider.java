@@ -68,23 +68,19 @@ public class NfsFsProvider extends FileSystemProvider {
                     "NFS already mounted: " + config.getHost() + ":" + config.getPort() + config.getExportPath());
         }
 
-        try {
-            // Verify connection before adding to map
-            NfsIO.verifyConnection(config);
+        // Verify connection before adding to map
+        NfsIO.verifyConnection(config);
 
-            NfsFileSystem fs = new NfsFileSystem(this, config);
-            NfsFileSystem previous = mounted.putIfAbsent(key, fs);
+        NfsFileSystem fs = new NfsFileSystem(this, config);
+        NfsFileSystem previous = mounted.putIfAbsent(key, fs);
 
-            if (previous != null) {
-                throw new FileSystemAlreadyExistsException(
-                        "NFS already mounted: " + key);
-            }
-
-            fs.installShutdownHook();
-            return fs;
-        } catch (IOException ex) {
-            throw ex;
+        if (previous != null) {
+            throw new FileSystemAlreadyExistsException(
+                    "NFS already mounted: " + key);
         }
+
+        fs.installShutdownHook();
+        return fs;
     }
 
     @Override
@@ -145,7 +141,7 @@ public class NfsFsProvider extends FileSystemProvider {
         private final String remotePath;
         private final java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
         private boolean closed;
-        private int position;
+        private long position;
 
         NfsWritableByteChannel(NfsConnectionConfig config, String remotePath) {
             this.config = config;
@@ -175,8 +171,14 @@ public class NfsFsProvider extends FileSystemProvider {
         }
 
         @Override
-        public SeekableByteChannel position(long newPosition) {
-            position = (int) newPosition;
+        public SeekableByteChannel position(long newPosition) throws IOException {
+            if (newPosition < 0) {
+                throw new IllegalArgumentException("Position must be non-negative");
+            }
+            if (newPosition > Integer.MAX_VALUE) {
+                throw new IOException("Position exceeds maximum supported buffer size");
+            }
+            position = newPosition;
             return this;
         }
 
