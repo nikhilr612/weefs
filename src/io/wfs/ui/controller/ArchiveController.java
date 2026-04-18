@@ -3,6 +3,7 @@ package io.wfs.ui.controller;
 import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
+import io.wfs.ui.util.UIUtils;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -318,7 +319,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
     // ── NFS operations (INfsController implementation) ───────────────────
 
     @Override
-    public NfsFileOperations getNfsFileOps() {
+    public IFileOperations getNfsFileOps() {
         return nfsFileOps;
     }
 
@@ -515,9 +516,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
     }
 
     private void showError(String operation, Exception ex) {
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(parentComponent,
-                operation + " failed:\n" + ex.getMessage(),
-                "Error", JOptionPane.ERROR_MESSAGE));
+        UIUtils.showError(parentComponent, operation, ex);
     }
 
     private void clearNfsIfMounted() throws IOException {

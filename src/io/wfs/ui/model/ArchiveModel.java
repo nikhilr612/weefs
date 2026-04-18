@@ -37,13 +37,22 @@ public final class ArchiveModel {
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
     private final FileSystemFactory fileSystemFactory = new FileSystemFactory();
+    private final RemoteMountManager remoteMountManager = new RemoteMountManager();
 
     private Path archivePath;
-    private NfsConnectionConfig nfsConfig;
     private FileSystem fileSystem;
     private boolean remoteMounted;
     private boolean readOnly;
     private FileNode selectedFile;
+
+    public ArchiveModel() {
+        // Bridge RemoteMountManager events through this model's own pcs on the EDT so
+        // existing listeners on ArchiveModel.PROP_NFS_CONFIG continue to receive
+        // notifications on the Event Dispatch Thread.
+        remoteMountManager.addPropertyChangeListener(RemoteMountManager.PROP_NFS_CONFIG,
+            evt -> fireOnEdt(() -> pcs.firePropertyChange(
+                ArchiveModel.PROP_NFS_CONFIG, evt.getOldValue(), evt.getNewValue())));
+    }
 
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         pcs.addPropertyChangeListener(listener);
@@ -84,7 +93,7 @@ public final class ArchiveModel {
         this.readOnly = readOnly;
         Path oldPath = this.archivePath;
         this.archivePath = displayPath;
-        this.nfsConfig = null;
+        remoteMountManager.setNfsConfig(null);
 
         boolean newRemoteMounted = "weefs".equalsIgnoreCase(uri.getScheme());
         this.remoteMounted = newRemoteMounted;
@@ -129,7 +138,7 @@ public final class ArchiveModel {
             fileSystem.close();
         }
         fileSystem = null;
-        nfsConfig = null;
+        remoteMountManager.setNfsConfig(null);
         remoteMounted = false;
         Path oldPath = archivePath;
         archivePath = null;
@@ -168,33 +177,30 @@ public final class ArchiveModel {
             closeArchive();
         }
 
-        NfsConnectionConfig oldConfig = this.nfsConfig;
-        this.nfsConfig = config;
+        NfsConnectionConfig oldConfig = remoteMountManager.getNfsConfig();
         this.selectedFile = null;
 
         if (config != null) {
             final boolean previousReadOnly = this.readOnly;
             this.readOnly = config.isReadOnly();
+            remoteMountManager.setNfsConfig(config);
             fireOnEdt(() -> {
                 pcs.firePropertyChange(PROP_OPEN, false, true);
                 pcs.firePropertyChange(PROP_READ_ONLY, previousReadOnly, readOnly);
-                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, config);
             });
         } else {
             this.readOnly = false;
-            fireOnEdt(() -> {
-                pcs.firePropertyChange(PROP_OPEN, true, false);
-                pcs.firePropertyChange(PROP_NFS_CONFIG, oldConfig, null);
-            });
+            remoteMountManager.setNfsConfig(null);
+            fireOnEdt(() -> pcs.firePropertyChange(PROP_OPEN, true, false));
         }
     }
 
     public NfsConnectionConfig getNfsConfig() {
-        return nfsConfig;
+        return remoteMountManager.getNfsConfig();
     }
 
     public boolean isNfsMounted() {
-        return nfsConfig != null;
+        return remoteMountManager.isNfsMounted();
     }
 
     public boolean isRemoteMounted() {
@@ -223,7 +229,8 @@ public final class ArchiveModel {
         }
 
         if (isNfsMounted()) {
-            List<NfsFileInfo> nfsChildren = NfsIO.listDirectory(nfsConfig, directory.toString());
+            NfsConnectionConfig cfg = remoteMountManager.getNfsConfig();
+            List<NfsFileInfo> nfsChildren = NfsIO.listDirectory(cfg, directory.toString());
             List<FileNode> children = new ArrayList<>();
             for (NfsFileInfo child : nfsChildren) {
                 String remotePath = joinRemotePath(directory.toString(), child.getName());
@@ -273,7 +280,7 @@ public final class ArchiveModel {
      */
     public String readFileContent(Path path) throws IOException {
         if (isNfsMounted()) {
-            return new String(NfsIO.readFile(nfsConfig, path.toString()), StandardCharsets.UTF_8);
+            return new String(NfsIO.readFile(remoteMountManager.getNfsConfig(), path.toString()), StandardCharsets.UTF_8);
         }
         return Files.readString(path);
     }
@@ -283,7 +290,7 @@ public final class ArchiveModel {
      */
     public byte[] readFileBytes(Path path) throws IOException {
         if (isNfsMounted()) {
-            return NfsIO.readFile(nfsConfig, path.toString());
+            return NfsIO.readFile(remoteMountManager.getNfsConfig(), path.toString());
         }
         return Files.readAllBytes(path);
     }

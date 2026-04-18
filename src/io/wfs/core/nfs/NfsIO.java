@@ -1,5 +1,7 @@
 package io.wfs.core.nfs;
 
+import io.wfs.util.FileUtils;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -190,18 +192,6 @@ public final class NfsIO {
     }
 
     private static void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(path -> {
-                        try {
-                            Files.delete(path);
-                        } catch (IOException ignored) {
-                            // Continue with next
-                        }
-                    });
-        }
+        FileUtils.deleteRecursively(root);
     }
 }

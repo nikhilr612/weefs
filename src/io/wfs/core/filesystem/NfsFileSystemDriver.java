@@ -8,7 +8,15 @@ import java.util.Map;
 
 final class NfsFileSystemDriver implements FileSystemDriver {
 
-    private final NfsSftpFsProvider provider = new NfsSftpFsProvider();
+    private final NfsSftpFsProvider provider;
+
+    NfsFileSystemDriver() {
+        this(new NfsSftpFsProvider());
+    }
+
+    NfsFileSystemDriver(NfsSftpFsProvider provider) {
+        this.provider = provider;
+    }
 
     @Override
     public String scheme() {

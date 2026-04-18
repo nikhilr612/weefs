@@ -28,8 +28,13 @@ public final class FileSystemFactory {
 
     public void register(FileSystemDriver driver) {
         Objects.requireNonNull(driver, "driver");
-        String scheme = normalizeScheme(driver.scheme());
-        drivers.put(scheme, driver);
+        registerDriver(driver.scheme(), driver);
+    }
+
+    public void registerDriver(String scheme, FileSystemDriver driver) {
+        Objects.requireNonNull(scheme, "scheme");
+        Objects.requireNonNull(driver, "driver");
+        drivers.put(normalizeScheme(scheme), driver);
     }
 
     public FileSystem open(URI uri, Map<String, ?> env) throws IOException {

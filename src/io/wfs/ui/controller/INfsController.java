@@ -12,9 +12,9 @@ public interface INfsController {
 
     /**
      * Returns the NFS file operations delegate.
-     * @return the {@link NfsFileOperations} instance; never {@code null}
+     * @return the {@link IFileOperations} instance; never {@code null}
      */
-    NfsFileOperations getNfsFileOps();
+    IFileOperations getNfsFileOps();
 
     /**
      * Prompts user to enter NFS connection details and mounts the NFS share.

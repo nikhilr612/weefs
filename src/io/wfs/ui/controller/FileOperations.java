@@ -2,8 +2,9 @@ package io.wfs.ui.controller;
 
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
+import io.wfs.ui.util.UIUtils;
+import io.wfs.util.FileUtils;
 
-import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -169,19 +170,10 @@ public final class FileOperations implements IFileOperations {
     }
 
     private void deleteRecursive(Path root) throws IOException {
-        if (Files.isDirectory(root)) {
-            try (var stream = Files.newDirectoryStream(root)) {
-                for (Path child : stream) {
-                    deleteRecursive(child);
-                }
-            }
-        }
-        Files.deleteIfExists(root);
+        FileUtils.deleteRecursively(root);
     }
 
     private void showError(String operation, Exception ex) {
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
-                operation + " failed: " + ex.getMessage(),
-                "Error", JOptionPane.ERROR_MESSAGE));
+        UIUtils.showError(null, operation, ex);
     }
 }

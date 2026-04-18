@@ -8,7 +8,15 @@ import java.util.Map;
 
 final class ZipFileSystemDriver implements FileSystemDriver {
 
-    private final ExtZipFsProvider provider = new ExtZipFsProvider();
+    private final ExtZipFsProvider provider;
+
+    ZipFileSystemDriver() {
+        this(new ExtZipFsProvider());
+    }
+
+    ZipFileSystemDriver(ExtZipFsProvider provider) {
+        this.provider = provider;
+    }
 
     @Override
     public String scheme() {

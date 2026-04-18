@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-final class NfsFileSystem extends FileSystem {
+final class NfsFileSystem extends FileSystem implements IRemoteFileSystem {
 
     private final FileSystemProvider provider;
     private final NfsSftpFsProvider sftpProvider;
@@ -61,8 +61,19 @@ final class NfsFileSystem extends FileSystem {
         return config;
     }
 
-    boolean hasSftpConfig() {
+    @Override
+    public NfsSftpConfig sftpConfig() {
+        return config();
+    }
+
+    @Override
+    public boolean hasSftpConfig() {
         return config != null;
+    }
+
+    @Override
+    public FileSystem fileSystem() {
+        return this;
     }
 
     NfsConnectionConfig getConfig() {
@@ -78,7 +89,8 @@ final class NfsFileSystem extends FileSystem {
                 readOnly);
     }
 
-    String toRemotePath(NfsPath path) {
+    @Override
+    public String toRemotePath(NfsPath path) {
         if (config == null) {
             return path.toString();
         }
@@ -90,7 +102,8 @@ final class NfsFileSystem extends FileSystem {
         return NfsSftpFsIO.join(config.remoteRoot(), suffix);
     }
 
-    void ensureWritable() {
+    @Override
+    public void ensureWritable() {
         if (readOnly) {
             String host = config != null ? config.host() : legacyConfig.getHost();
             throw new UnsupportedOperationException("File system is read-only: " + host);
@@ -98,7 +111,8 @@ final class NfsFileSystem extends FileSystem {
         ensureOpen();
     }
 
-    void ensureWritableFor(Set<? extends OpenOption> options) {
+    @Override
+    public void ensureWritableFor(Set<? extends OpenOption> options) {
         ensureOpen();
         if (!readOnly || options == null) {
             return;
@@ -116,7 +130,8 @@ final class NfsFileSystem extends FileSystem {
         }
     }
 
-    void ensureOpen() {
+    @Override
+    public void ensureOpen() {
         if (!isOpen()) {
             String host = config != null ? config.host() : legacyConfig.getHost();
             throw new FileSystemNotFoundException("File system is closed: " + host);

@@ -3,8 +3,8 @@ package io.wfs.ui.controller;
 import io.wfs.core.nfs.NfsConnectionConfig;
 import io.wfs.core.nfs.NfsIO;
 import io.wfs.ui.model.ArchiveModel;
+import io.wfs.ui.util.UIUtils;
 
-import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -41,9 +41,13 @@ public final class NfsFileOperations implements IFileOperations {
         return config;
     }
 
+    private NfsConnectionConfig requireConfig() {
+        return this.config;
+    }
+
     @Override
     public boolean createFile(Path path, String content) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return createFile(cfg, path.toString(), content);
@@ -51,7 +55,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean createDirectory(Path path) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return createDirectory(cfg, path.toString());
@@ -59,7 +63,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean delete(Path path) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return delete(cfg, path.toString());
@@ -67,7 +71,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean rename(Path oldPath, Path newPath) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return rename(cfg, oldPath.toString(), newPath.toString());
@@ -75,7 +79,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean saveFile(Path path, String content) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return saveFile(cfg, path.toString(), content);
@@ -83,7 +87,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean extractTo(Path sourcePath, Path destination) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return extractTo(cfg, sourcePath.toString(), destination);
@@ -91,7 +95,7 @@ public final class NfsFileOperations implements IFileOperations {
 
     @Override
     public boolean copy(Path sourcePath, Path targetDir) {
-        NfsConnectionConfig cfg = this.config;
+        NfsConnectionConfig cfg = requireConfig();
         if (cfg == null)
             return false;
         return copy(cfg, sourcePath.toString(), targetDir.toString());
@@ -216,9 +220,6 @@ public final class NfsFileOperations implements IFileOperations {
     }
 
     private void showError(String title, IOException ex) {
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
-                title + " failed:\n" + ex.getMessage(),
-                title,
-                JOptionPane.ERROR_MESSAGE));
+        UIUtils.showError(null, title, ex);
     }
 }
