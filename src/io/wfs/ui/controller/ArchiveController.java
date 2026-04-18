@@ -141,7 +141,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
         Path selectedWithExtension = ensureArchiveExtension(selected, selectedFormat.requiredExtension);
 
         executeInBackground("Creating archive...", () -> {
-            try {                
+            try {
                 clearNfsIfMounted();
                 model.createArchive(selectedWithExtension);
             } catch (IOException ex) {
@@ -440,12 +440,15 @@ public final class ArchiveController implements IArchiveController, INfsControll
         private final String filterDescription;
         private final String[] extensions;
 
-        private ArchiveFormatOption(String label, String requiredExtension, String filterDescription, String... extensions) {
+        private ArchiveFormatOption(String label, String requiredExtension, String filterDescription,
+                String... extensions) {
             this.label = label;
             this.requiredExtension = requiredExtension;
             this.filterDescription = filterDescription;
             this.extensions = extensions;
         }
+    }
+
     private Path resolveTargetDirectory() {
         FileNode selected = model.getSelectedFile();
         return getTargetDirectory(selected);

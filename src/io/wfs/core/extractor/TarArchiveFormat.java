@@ -17,11 +17,11 @@ final class TarArchiveFormat implements ArchiveFormat {
 
     @Override
     public void extract(Path archiveFile, Path targetRoot) throws IOException {
-        ExtZipFsIO.extractTarToDirectory(archiveFile, targetRoot);
+        ExtZipFsIO.extractTarToDirectory(archiveFile, targetRoot, "none");
     }
 
     @Override
     public void write(Path sourceRoot, Path archiveFile) throws IOException {
-        ExtZipFsIO.writeDirectoryToTar(sourceRoot, archiveFile);
+        ExtZipFsIO.writeDirectoryToTar(sourceRoot, archiveFile, "none");
     }
 }

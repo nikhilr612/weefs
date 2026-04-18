@@ -30,7 +30,7 @@ final class ExtZipFsIO {
     }
 
     static void extractArchiveToDirectory(Path archiveFile, Path targetRoot) throws IOException {
-        ArchiveFormat format = ArchiveFormatDetector.detect(archiveFile);
+        ArchiveFormatInfo format = ArchiveFormatDetector.detect(archiveFile);
         switch (format.containerType()) {
             case ZIP -> extractZipToDirectory(archiveFile, targetRoot);
             case TAR -> extractTarToDirectory(archiveFile, targetRoot, format.compressionKey());
@@ -106,7 +106,7 @@ final class ExtZipFsIO {
     }
 
     static void writeDirectoryToArchive(Path sourceRoot, Path archiveFile) throws IOException {
-        ArchiveFormat format = ArchiveFormatDetector.detect(archiveFile);
+        ArchiveFormatInfo format = ArchiveFormatDetector.detect(archiveFile);
         switch (format.containerType()) {
             case ZIP -> writeDirectoryToZip(sourceRoot, archiveFile);
             case TAR -> writeDirectoryToTar(sourceRoot, archiveFile, format.compressionKey());

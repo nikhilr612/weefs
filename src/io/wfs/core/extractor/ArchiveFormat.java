@@ -1,20 +1,16 @@
 package io.wfs.core.extractor;
 
-final class ArchiveFormat {
+import java.io.IOException;
+import java.nio.file.Path;
 
-    private final ArchiveContainerType containerType;
-    private final String compressionKey;
+/**
+ * Interface for archive format algorithms.
+ */
+public interface ArchiveFormat {
 
-    ArchiveFormat(ArchiveContainerType containerType, String compressionKey) {
-        this.containerType = containerType;
-        this.compressionKey = compressionKey;
-    }
+    boolean supports(Path archiveFile);
 
-    ArchiveContainerType containerType() {
-        return containerType;
-    }
+    void extract(Path archiveFile, Path targetRoot) throws IOException;
 
-    String compressionKey() {
-        return compressionKey;
-    }
+    void write(Path sourceRoot, Path archiveFile) throws IOException;
 }
