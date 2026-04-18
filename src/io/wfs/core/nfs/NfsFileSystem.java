@@ -17,21 +17,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 final class NfsFileSystem extends FileSystem {
 
-    private final NfsSftpFsProvider provider;
+    private final FileSystemProvider provider;
+    private final NfsSftpFsProvider sftpProvider;
     private final NfsSftpConfig config;
+    private final NfsConnectionConfig legacyConfig;
     private final boolean readOnly;
     private final AtomicBoolean open;
     private volatile Thread shutdownHook;
 
     NfsFileSystem(NfsSftpFsProvider provider, NfsSftpConfig config, boolean readOnly) {
         this.provider = provider;
+        this.sftpProvider = provider;
         this.config = config;
+        this.legacyConfig = null;
         this.readOnly = readOnly;
         this.open = new AtomicBoolean(true);
     }
 
+    NfsFileSystem(NfsFsProvider provider, NfsConnectionConfig config) {
+        this.provider = provider;
+        this.sftpProvider = null;
+        this.config = null;
+        this.legacyConfig = config;
+        this.readOnly = config.isReadOnly();
+        this.open = new AtomicBoolean(true);
+    }
+
     void installShutdownHook() {
-        shutdownHook = new Thread(this::closeQuietly, "weefs-sftp-shutdown-" + config.host());
+        String host = config != null ? config.host() : legacyConfig.getHost();
+        shutdownHook = new Thread(this::closeQuietly, "weefs-sftp-shutdown-" + host);
         try {
             Runtime.getRuntime().addShutdownHook(shutdownHook);
         } catch (IllegalStateException ignored) {
@@ -40,10 +54,33 @@ final class NfsFileSystem extends FileSystem {
     }
 
     NfsSftpConfig config() {
+        if (config == null) {
+            throw new IllegalStateException("SFTP config unavailable for legacy NFS file system");
+        }
         return config;
     }
 
+    boolean hasSftpConfig() {
+        return config != null;
+    }
+
+    NfsConnectionConfig getConfig() {
+        if (legacyConfig != null) {
+            return legacyConfig;
+        }
+        return new NfsConnectionConfig(
+                config.host(),
+                config.port(),
+                config.remoteRoot(),
+                config.remoteRoot(),
+                30,
+                readOnly);
+    }
+
     String toRemotePath(NfsPath path) {
+        if (config == null) {
+            return path.toString();
+        }
         String virtual = path.toString();
         if ("/".equals(virtual)) {
             return config.remoteRoot();
@@ -54,7 +91,8 @@ final class NfsFileSystem extends FileSystem {
 
     void ensureWritable() {
         if (readOnly) {
-            throw new UnsupportedOperationException("File system is read-only: " + config.host());
+            String host = config != null ? config.host() : legacyConfig.getHost();
+            throw new UnsupportedOperationException("File system is read-only: " + host);
         }
         ensureOpen();
     }
@@ -66,16 +104,18 @@ final class NfsFileSystem extends FileSystem {
         }
         for (OpenOption option : options) {
             String name = String.valueOf(option).toUpperCase();
-            if (name.contains("WRITE") || name.contains("APPEND") || name.contains("CREATE")
-                    || name.contains("TRUNCATE") || name.contains("DELETE")) {
-                throw new UnsupportedOperationException("File system is read-only: " + config.host());
+                if (name.contains("WRITE") || name.contains("APPEND") || name.contains("CREATE")
+                        || name.contains("TRUNCATE") || name.contains("DELETE")) {
+                    String host = config != null ? config.host() : legacyConfig.getHost();
+                    throw new UnsupportedOperationException("File system is read-only: " + host);
+                }
             }
         }
-    }
 
-    private void ensureOpen() {
+    void ensureOpen() {
         if (!isOpen()) {
-            throw new FileSystemNotFoundException("File system is closed: " + config.host());
+            String host = config != null ? config.host() : legacyConfig.getHost();
+            throw new FileSystemNotFoundException("File system is closed: " + host);
         }
     }
 
@@ -90,7 +130,12 @@ final class NfsFileSystem extends FileSystem {
             return;
         }
 
-        provider.unregister(this);
+        if (sftpProvider != null) {
+            sftpProvider.unregister(this);
+        }
+        if (legacyConfig != null) {
+            NfsIO.disconnect(legacyConfig);
+        }
 
         Thread hook = shutdownHook;
         if (hook != null && hook != Thread.currentThread()) {

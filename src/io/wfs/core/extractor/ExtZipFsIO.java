@@ -27,11 +27,7 @@ final class ExtZipFsIO {
     }
 
     static void extractArchiveToDirectory(Path archiveFile, Path targetRoot) throws IOException {
-        if (isTarArchive(archiveFile)) {
-            extractTarToDirectory(archiveFile, targetRoot);
-            return;
-        }
-        extractZipToDirectory(archiveFile, targetRoot);
+        ArchiveFormats.extractToDirectory(archiveFile, targetRoot);
     }
 
     static void extractZipToDirectory(Path zipArchive, Path targetRoot) throws IOException {
@@ -40,7 +36,7 @@ final class ExtZipFsIO {
         }
 
         try (InputStream in = new BufferedInputStream(Files.newInputStream(zipArchive));
-             ZipInputStream zipIn = new ZipInputStream(in)) {
+                ZipInputStream zipIn = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zipIn.getNextEntry()) != null) {
                 Path destination = targetRoot.resolve(entry.getName()).normalize();
@@ -71,7 +67,7 @@ final class ExtZipFsIO {
 
         byte[] buffer = new byte[8192];
         try (InputStream in = new BufferedInputStream(Files.newInputStream(tarArchive));
-             TarInputStream tarIn = new TarInputStream(in)) {
+                TarInputStream tarIn = new TarInputStream(in)) {
             TarEntry entry;
             while ((entry = tarIn.getNextEntry()) != null) {
                 Path destination = targetRoot.resolve(entry.getName()).normalize();
@@ -100,11 +96,7 @@ final class ExtZipFsIO {
     }
 
     static void writeDirectoryToArchive(Path sourceRoot, Path archiveFile) throws IOException {
-        if (isTarArchive(archiveFile)) {
-            writeDirectoryToTar(sourceRoot, archiveFile);
-            return;
-        }
-        writeDirectoryToZip(sourceRoot, archiveFile);
+        ArchiveFormats.writeFromDirectory(sourceRoot, archiveFile);
     }
 
     static void writeDirectoryToZip(Path sourceRoot, Path archiveFile) throws IOException {
@@ -116,8 +108,8 @@ final class ExtZipFsIO {
         Path tempArchive = Files.createTempFile(parent, "extzipfs-", ".zip");
         try {
             try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempArchive));
-                ZipOutputStream zipOut = new ZipOutputStream(out);
-                Stream<Path> walk = Files.walk(sourceRoot)) {
+                    ZipOutputStream zipOut = new ZipOutputStream(out);
+                    Stream<Path> walk = Files.walk(sourceRoot)) {
                 List<Path> entries = walk.sorted().collect(Collectors.toList());
                 for (Path path : entries) {
                     if (path.equals(sourceRoot)) {
@@ -143,7 +135,8 @@ final class ExtZipFsIO {
             }
 
             try {
-                Files.move(tempArchive, archiveFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(tempArchive, archiveFile, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException ex) {
                 Files.move(tempArchive, archiveFile, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -161,8 +154,8 @@ final class ExtZipFsIO {
         Path tempArchive = Files.createTempFile(parent, "extzipfs-", ".tar");
         try {
             try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempArchive));
-                 TarOutputStream tarOut = new TarOutputStream(out);
-                 Stream<Path> walk = Files.walk(sourceRoot)) {
+                    TarOutputStream tarOut = new TarOutputStream(out);
+                    Stream<Path> walk = Files.walk(sourceRoot)) {
                 List<Path> entries = walk.sorted().collect(Collectors.toList());
                 for (Path path : entries) {
                     if (path.equals(sourceRoot)) {
@@ -188,7 +181,8 @@ final class ExtZipFsIO {
             }
 
             try {
-                Files.move(tempArchive, archiveFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(tempArchive, archiveFile, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException ex) {
                 Files.move(tempArchive, archiveFile, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -214,8 +208,4 @@ final class ExtZipFsIO {
         return relativePath.toString().replace(File.separatorChar, '/');
     }
 
-    private static boolean isTarArchive(Path archiveFile) {
-        String name = archiveFile.getFileName().toString().toLowerCase();
-        return name.endsWith(".tar");
-    }
 }

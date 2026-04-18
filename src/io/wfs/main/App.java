@@ -1,18 +1,57 @@
 package io.wfs.main;
 
-import io.wfs.ui.MainLauncher;
+import io.wfs.core.extractor.CoreExtractorUriTest;
+import io.wfs.core.nfs.CoreNfsPathTest;
 
 public class App {
 
     public static void main(String[] args) throws Exception {
-        if (args.length > 0 && "integration".equalsIgnoreCase(args[0])) {
-            ArchiveIntegrationTest.run();
-            NFSIntegrationTest.runIfConfigured();
-        } else if (args.length > 0 && "gui".equalsIgnoreCase(args[0])) {
-            io.wfs.ui.WeeFsApp.start();
+        if (args.length > 0) {
+            String command = args[0].toLowerCase();
+            switch (command) {
+                case "integration":
+                    ArchiveIntegrationTest.run();
+                    NFSIntegrationTest.runIfConfigured();
+                    break;
+                case "nfs-integration":
+                    NfsIntegrationTest.run();
+                    break;
+                case "unit":
+                    CoreExtractorTest.run();
+                    CoreExtractorUriTest.run();
+                    CoreNfsTest.run();
+                    CoreNfsPathTest.run();
+                    ModelTest.run();
+                    UtilTest.run();
+                    break;
+                case "all-integration":
+                    CoreExtractorTest.run();
+                    CoreExtractorUriTest.run();
+                    CoreNfsTest.run();
+                    CoreNfsPathTest.run();
+                    ModelTest.run();
+                    UtilTest.run();
+                    ArchiveIntegrationTest.run();
+                    NfsIntegrationTest.run();
+                    NFSIntegrationTest.runIfConfigured();
+                    break;
+                case "gui":
+                    io.wfs.ui.WeeFsApp.start();
+                    break;
+                default:
+                    printUsage();
+            }
         } else {
-            System.out.println("Usage: pass 'integration' to run archive checks (plus optional NFS round-trip), or 'gui' to launch the archive explorer.");
+            printUsage();
         }
-        // TODO: add tests for
+    }
+
+    private static void printUsage() {
+        System.out.println("Usage:");
+        System.out.println("  integration       - Run archive integration tests (+ optional remote NFS round-trip)");
+        System.out.println("  nfs-integration   - Run local NFS adapter integration tests");
+        System.out.println("  unit              - Run unit tests (extractor, NFS, model)");
+        System.out.println("  all-integration   - Run unit + integration tests");
+        System.out.println("  gui               - Launch GUI application");
     }
 }

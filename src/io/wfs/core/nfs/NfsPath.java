@@ -59,7 +59,8 @@ final class NfsPath implements Path {
 
     @Override
     public Path getRoot() {
-        return new NfsPath(fileSystem, "/");
+        Path root = delegate.getRoot();
+        return root == null ? null : new NfsPath(fileSystem, root.toString());
     }
 
     @Override
@@ -68,7 +69,7 @@ final class NfsPath implements Path {
         if (fileName == null) {
             return null;
         }
-        return Path.of(fileName.toString());
+        return new NfsPath(fileSystem, fileName.toString());
     }
 
     @Override
@@ -146,12 +147,18 @@ final class NfsPath implements Path {
 
     @Override
     public Path relativize(Path other) {
+        if (!fileSystem.hasSftpConfig()) {
+            throw new UnsupportedOperationException("Relativization not supported for legacy NFS paths");
+        }
         NfsPath ext = requireSameProvider(other);
         return new NfsPath(fileSystem, delegate.relativize(ext.delegate).toString());
     }
 
     @Override
     public URI toUri() {
+        if (!fileSystem.hasSftpConfig()) {
+            throw new UnsupportedOperationException("URI conversion not supported for legacy NFS paths");
+        }
         NfsSftpConfig cfg = fileSystem.config();
         String internal = toVirtualString();
         String uriPath = cfg.remoteRoot();
@@ -220,11 +227,45 @@ final class NfsPath implements Path {
     }
 
     private static String normalizeVirtualPath(String raw) {
-        String value = raw == null || raw.isBlank() ? "/" : raw.replace('\\', '/').trim();
-        if (!value.startsWith("/")) {
-            value = "/" + value;
+        String value = raw == null ? "" : raw.replace('\\', '/').trim();
+        if (value.isBlank()) {
+            return "/";
         }
-        value = NfsSftpFsIO.normalizeRemotePath(value);
-        return value.isBlank() ? "/" : value;
+
+        boolean absolute = value.startsWith("/");
+        String[] parts = value.split("/+");
+        String[] normalized = new String[parts.length];
+        int count = 0;
+
+        for (String part : parts) {
+            if (part.isEmpty() || ".".equals(part)) {
+                continue;
+            }
+            if ("..".equals(part)) {
+                if (count > 0 && !"..".equals(normalized[count - 1])) {
+                    count--;
+                } else if (!absolute) {
+                    normalized[count++] = part;
+                }
+                continue;
+            }
+            normalized[count++] = part;
+        }
+
+        StringBuilder result = new StringBuilder();
+        if (absolute) {
+            result.append('/');
+        }
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                result.append('/');
+            }
+            result.append(normalized[i]);
+        }
+
+        if (result.length() == 0) {
+            return absolute ? "/" : "";
+        }
+        return result.toString();
     }
 }
