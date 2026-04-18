@@ -35,5 +35,10 @@ run-gui:
 	java -jar bin/artifact.jar gui
 test-ui: build
 	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
+test-unit: build
+	java -jar bin/artifact.jar unit
+test-all: build
+	java -jar bin/artifact.jar all-integration
+	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
 clean:
 	rm -rf bin

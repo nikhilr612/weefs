@@ -300,19 +300,29 @@ public final class FileContentPanel extends JPanel {
             g2.setFont(getFont());
 
             FontMetrics fm = g2.getFontMetrics();
-            int lineHeight = fm.getHeight();
             int ascent = fm.getAscent();
             int lines = textArea.getLineCount();
 
             Rectangle clip = g2.getClipBounds();
-            int startLine = Math.max(0, (clip.y / lineHeight));
-            int endLine = Math.min(lines, ((clip.y + clip.height) / lineHeight) + 1);
 
-            for (int i = startLine; i < endLine; i++) {
-                String num = String.valueOf(i + 1);
-                int x = getWidth() - fm.stringWidth(num) - 6;
-                int y = (i * lineHeight) + ascent;
-                g2.drawString(num, x, y);
+            for (int i = 0; i < lines; i++) {
+                try {
+                    java.awt.geom.Rectangle2D lineRect2D = textArea.modelToView2D(textArea.getLineStartOffset(i));
+                    if (lineRect2D == null)
+                        continue;
+                    int y = (int) lineRect2D.getY();
+                    int lineH = (int) lineRect2D.getHeight();
+                    if (y + lineH < clip.y)
+                        continue;
+                    if (y > clip.y + clip.height)
+                        break;
+
+                    String num = String.valueOf(i + 1);
+                    int x = getWidth() - fm.stringWidth(num) - 6;
+                    g2.drawString(num, x, y + ascent);
+                } catch (javax.swing.text.BadLocationException ignored) {
+                    break;
+                }
             }
         }
     }
