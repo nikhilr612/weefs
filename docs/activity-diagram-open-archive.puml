@@ -1,0 +1,53 @@
+@startuml activity-diagram-open-archive
+title Open Archive / Mount Remote — URI Routing via FileSystemFactory
+
+start
+
+:User triggers open action
+(File chooser or URI dialog);
+
+if (Input is a File object?) then (yes)
+    :ArchiveModel.openArchive(file);
+    :Convert file to xzip:// URI;
+else (no — URI string)
+    :ArchiveModel.openMountUri(uri);
+    :Parse URI scheme;
+endif
+
+:FileSystemFactory.open(uri, env);
+
+fork
+    :scheme == "xzip"?;
+    :ZipFileSystemDriver.open(uri, env);
+    :ExtZipFsProvider parses URI\n(ExtZipParsedUri);
+    :ExtZipFileSystem created\n(archive opened on disk);
+    :ArchiveModel stores ExtZipFileSystem;
+    :fire PROP_ARCHIVE_PATH;
+    :MenuBarFactory enables\nclose/extract menus;
+fork again
+    :scheme == "weefs"?;
+    :NfsFileSystemDriver.open(uri, env);
+    :NfsParsedUri.parse(uri)\n(host, port, path, auth env-var);
+    :Read password from env var;
+    if (env var set?) then (yes)
+        :NfsSftpConfig created;
+        :NfsSftpFsProvider injected into\nNfsFileSystemDriver (DIP);
+        :NfsFileSystem(NfsSftpFsProvider, NfsSftpConfig)\ncreated;
+        :ArchiveModel.remoteMounted = true;
+        :fire PROP_REMOTE_MOUNTED;
+        :MenuBarFactory enables\nunmount/extract menus;
+    else (no)
+        :Throw IOException\n("auth env var not set");
+        :UIUtils.showError() displayed;
+        stop
+    endif
+fork again
+    :scheme == "file"?;
+    :LocalFileSystemDriver.open(uri, env);
+    :FileSystems.getDefault() returned;
+end fork
+
+:ArchiveTreePanel refreshes tree view;
+
+stop
+@enduml

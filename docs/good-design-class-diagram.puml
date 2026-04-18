@@ -1,0 +1,323 @@
+@startuml good-design-class-diagram
+title WeeFsApp — Good Design (v2, post-refactor)
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.core.filesystem   (Strategy + OCP)
+' ─────────────────────────────────────────────────
+package "io.wfs.core.filesystem" {
+    interface FileSystemDriver {
+        +scheme() : String
+        +open(URI, Map) : FileSystem
+    }
+
+    class FileSystemFactory {
+        -drivers : ConcurrentMap<String,FileSystemDriver>
+        +FileSystemFactory()
+        +register(FileSystemDriver)
+        +registerDriver(String, FileSystemDriver)   ' OCP: extensible without modification
+        +open(URI, Map) : FileSystem
+        +supportedSchemes() : List<String>
+    }
+
+    class LocalFileSystemDriver {
+        +scheme() : String
+        +open(URI, Map) : FileSystem
+    }
+
+    class NfsFileSystemDriver {
+        -provider : NfsSftpFsProvider   ' DIP: injected
+        +NfsFileSystemDriver()
+        +NfsFileSystemDriver(NfsSftpFsProvider)
+        +scheme() : String
+        +open(URI, Map) : FileSystem
+    }
+
+    class ZipFileSystemDriver {
+        -provider : ExtZipFsProvider    ' DIP: injected
+        +ZipFileSystemDriver()
+        +ZipFileSystemDriver(ExtZipFsProvider)
+        +scheme() : String
+        +open(URI, Map) : FileSystem
+    }
+
+    FileSystemDriver <|.. LocalFileSystemDriver
+    FileSystemDriver <|.. NfsFileSystemDriver
+    FileSystemDriver <|.. ZipFileSystemDriver
+    FileSystemFactory o--> FileSystemDriver : "routes by scheme"
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.core.nfs
+' ─────────────────────────────────────────────────
+package "io.wfs.core.nfs" {
+    interface IRemoteFileSystem <<package-private>> {   ' SRP fix: explicit abstraction
+        +sftpConfig() : NfsSftpConfig
+        +hasSftpConfig() : boolean
+        +toRemotePath(NfsPath) : String
+        +ensureWritable()
+        +ensureWritableFor(Set<OpenOption>)
+        +ensureOpen()
+        +fileSystem() : FileSystem
+    }
+
+    class NfsFileSystem {
+        -sftpProvider : NfsSftpFsProvider
+        -sftpConfig : NfsSftpConfig
+        -legacyProvider : NfsFsProvider
+        -legacyConfig : NfsConnectionConfig
+        -readOnly : boolean
+        -open : boolean
+        +NfsFileSystem(NfsSftpFsProvider, NfsSftpConfig)
+        +NfsFileSystem(NfsFsProvider, NfsConnectionConfig)
+        +hasSftpConfig() : boolean
+        +toRemotePath(NfsPath) : String
+        +ensureWritableFor(Set<OpenOption>)
+        +close()
+    }
+    IRemoteFileSystem <|.. NfsFileSystem
+
+    class NfsSyncingByteChannel {
+        -buffer : byte[]
+        -position : long   ' bug-fix: was int
+        -dirty : boolean
+        +read(ByteBuffer) : int
+        +write(ByteBuffer) : int
+        +position() : long
+        +position(long) : SeekableByteChannel
+        +size() : long
+        +close()
+    }
+
+    class NfsPath {
+        -delegate : Path
+        -virtualPath : String
+        +equals(Object) : boolean
+        +hashCode() : int   ' bug-fix: uses delegate
+    }
+
+    class NfsParsedUri {
+        +host : String
+        +port : int
+        +remotePath : String
+        +authEnvVar : String
+        +parse(URI) : NfsParsedUri
+    }
+
+    class NfsSftpFsProvider {
+        +open(NfsSftpConfig, String) : NfsSyncingByteChannel
+        +listDir(NfsSftpConfig, String) : List<NfsFileInfo>
+        +stat(NfsSftpConfig, String) : NfsFileInfo
+        +delete(NfsSftpConfig, String)
+        +mkdir(NfsSftpConfig, String)
+    }
+
+    class NfsSftpFsIO {
+        +connect(NfsSftpConfig) : ChannelSftp
+    }
+
+    class NfsSftpConfig {
+        +host : String
+        +port : int
+        +user : String
+        +password : String
+    }
+
+    class NfsConnectionConfig {
+        +host : String
+        +port : int
+        +user : String
+        +password : String
+    }
+
+    class NfsDirectoryStream
+    class NfsDirectoryIterator
+    class NfsBasicFileAttributes
+    class NfsFileInfo
+    class NfsPathIterator
+
+    NfsFileSystem --> NfsSftpFsProvider
+    NfsSftpFsProvider --> NfsSftpFsIO
+    NfsFileSystem --> NfsConnectionConfig
+    NfsFileSystem --> NfsSftpConfig
+    NfsFileSystem "1" *-- "n" NfsPath
+    NfsSftpFsProvider --> NfsSftpConfig
+    NfsDirectoryStream --> NfsDirectoryIterator
+    NfsDirectoryIterator --> NfsFileInfo
+    NfsFileSystem --> NfsDirectoryStream
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.core.extractor
+' ─────────────────────────────────────────────────
+package "io.wfs.core.extractor" {
+    interface ICompressionStrategy {
+        +compress(InputStream) : OutputStream
+        +decompress(InputStream) : InputStream
+    }
+    class CompressionStrategyFactory {
+        +get(ArchiveFormat) : ICompressionStrategy
+    }
+    class ExtZipFsProvider
+    class ExtZipFileSystem
+    class ExtZipPath
+    class ArchiveFormatDetector
+    class ArchiveFormats
+
+    ICompressionStrategy <|.. GzipCompressionStrategy
+    ICompressionStrategy <|.. Bzip2CompressionStrategy
+    ICompressionStrategy <|.. LzmaCompressionStrategy
+    ICompressionStrategy <|.. XzCompressionStrategy
+    ICompressionStrategy <|.. NoCompressionStrategy
+    CompressionStrategyFactory --> ICompressionStrategy
+    ExtZipFsProvider --> ExtZipFileSystem
+    ExtZipFileSystem "1" *-- "n" ExtZipPath
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.util  (DRY utility)
+' ─────────────────────────────────────────────────
+package "io.wfs.util" {
+    class FileUtils <<utility>> {
+        +{static} deleteRecursively(Path)   ' DRY fix: single impl
+    }
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.ui.util  (DRY utility)
+' ─────────────────────────────────────────────────
+package "io.wfs.ui.util" {
+    class UIUtils <<utility>> {
+        +{static} showError(Component, String, Exception)  ' DRY fix
+    }
+    class FileTypeDetector
+    class IconFactory
+    class SwingUtils
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.ui.model   (SRP split)
+' ─────────────────────────────────────────────────
+package "io.wfs.ui.model" {
+    class RemoteMountManager {   ' SRP fix: extracted from ArchiveModel
+        +PROP_NFS_CONFIG : String
+        -nfsConfig : NfsConnectionConfig
+        -pcs : PropertyChangeSupport
+        +setNfsConfig(NfsConnectionConfig)
+        +getNfsConfig() : NfsConnectionConfig
+        +isNfsMounted() : boolean
+        +addPropertyChangeListener(String, PCL)
+    }
+
+    class ArchiveModel {
+        +PROP_ARCHIVE_PATH : String
+        +PROP_REMOTE_MOUNTED : String       ' bug-fix: new event
+        -fsFactory : FileSystemFactory
+        -remoteMountManager : RemoteMountManager  ' SRP delegation
+        -remoteMounted : boolean
+        +openArchive(File)
+        +closeArchive()
+        +openMountUri(URI)
+        +isRemoteMounted() : boolean        ' bug-fix
+        +isNfsMounted() : boolean
+        +addPropertyChangeListener(String, PCL)
+    }
+
+    class FileNode
+
+    ArchiveModel --> RemoteMountManager
+    ArchiveModel --> FileSystemFactory
+    ArchiveModel "1" *-- "n" FileNode
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.ui.controller
+' ─────────────────────────────────────────────────
+package "io.wfs.ui.controller" {
+    interface IArchiveController {
+        +openArchive()
+        +closeArchive()
+        +extractSelected()
+        +getModel() : ArchiveModel
+    }
+
+    interface INfsController {
+        +mountNfs()
+        +unmountNfs()
+        +extractNfsSelected()
+        +getNfsFileOps() : IFileOperations   ' DIP fix: returns interface
+    }
+
+    interface IFileOperations {
+        +copyFile(Path, Path)
+        +deleteFile(Path)
+        +moveFile(Path, Path)
+    }
+
+    class ArchiveController {
+        -model : ArchiveModel
+        -fileOps : IFileOperations
+        +isNfsMounted() : boolean    ' bug-fix: uses model.isRemoteMounted()
+        +unmountNfs()                ' bug-fix: SFTP routing
+        +extractNfsSelected()        ' bug-fix: SFTP routing
+        +getNfsFileOps() : IFileOperations
+    }
+
+    class FileOperations {
+        +copyFile(Path, Path)
+        +deleteFile(Path)
+        +moveFile(Path, Path)
+    }
+
+    class NfsFileOperations {
+        -nfsConfig : NfsConnectionConfig
+        +requireConfig()             ' DRY fix: central null check
+        +copyFile(Path, Path)
+        +deleteFile(Path)
+        +moveFile(Path, Path)
+    }
+
+    class NfsConnectionDialog
+
+    IArchiveController <|.. ArchiveController
+    INfsController <|.. ArchiveController
+    IFileOperations <|.. FileOperations
+    IFileOperations <|.. NfsFileOperations
+    ArchiveController --> ArchiveModel
+    ArchiveController --> IFileOperations
+}
+
+' ─────────────────────────────────────────────────
+' PACKAGE: io.wfs.ui.view
+' ─────────────────────────────────────────────────
+package "io.wfs.ui.view" {
+    class MainFrame
+    class MenuBarFactory {
+        ' subscribes to PROP_NFS_CONFIG and PROP_REMOTE_MOUNTED (bug-fix)
+    }
+    class ToolBarFactory
+    class ArchiveTreePanel
+    class FileContentPanel
+    class StatusBarPanel
+    class FileTreeCellRenderer
+
+    MainFrame --> MenuBarFactory
+    MainFrame --> ToolBarFactory
+    MainFrame --> ArchiveTreePanel
+    MainFrame --> FileContentPanel
+    MainFrame --> StatusBarPanel
+}
+
+' ─────────────────────────────────────────────────
+' Cross-package wiring
+' ─────────────────────────────────────────────────
+MenuBarFactory ..> IArchiveController
+MenuBarFactory ..> INfsController
+ArchiveTreePanel ..> IArchiveController
+FileOperations ..> FileUtils
+NfsFileOperations ..> FileUtils
+ArchiveController ..> UIUtils
+NfsFileSystemDriver --> NfsSftpFsProvider
+ZipFileSystemDriver --> ExtZipFsProvider
+@enduml

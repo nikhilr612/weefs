@@ -1,0 +1,45 @@
+@startuml state-diagram-archive-lifecycle
+title Archive & Remote Mount Lifecycle
+
+[*] --> Idle : App starts
+
+state Idle {
+    [*] --> NoArchive
+}
+
+state ArchiveOpen {
+    [*] --> Browsing
+    Browsing --> Extracting : extractSelected()
+    Extracting --> Browsing : extraction complete
+}
+
+state RemoteMounted {
+    [*] --> RemoteBrowsing
+    RemoteBrowsing --> RemoteExtracting : extractNfsSelected()
+    RemoteExtracting --> RemoteBrowsing : extraction complete
+}
+
+NoArchive --> ArchiveOpen   : openArchive(File)\n[xzip:// URI routed via FileSystemFactory]
+ArchiveOpen --> NoArchive   : closeArchive()\nPROP_ARCHIVE_PATH fired
+
+NoArchive --> RemoteMounted : mountNfs() / openMountUri(URI)\n[weefs:// URI routed via FileSystemFactory]\nPROP_REMOTE_MOUNTED fired
+ArchiveOpen --> RemoteMounted : mountNfs()\n(archive stays open)
+
+RemoteMounted --> NoArchive      : unmountNfs()\n[SFTP: closeArchive()]\nPROP_REMOTE_MOUNTED cleared
+RemoteMounted --> ArchiveOpen    : unmountNfs()\n[legacy NFS: disconnects only]
+
+ArchiveOpen --> [*]   : App exits
+RemoteMounted --> [*] : App exits (connection closed)
+NoArchive --> [*]     : App exits
+
+note right of RemoteMounted
+  ArchiveModel.isRemoteMounted() == true
+  fires PROP_REMOTE_MOUNTED
+  MenuBarFactory enables unmount/extract menus
+end note
+
+note right of ArchiveOpen
+  FileSystemFactory.open(xzip://...) returns
+  ExtZipFileSystem via ZipFileSystemDriver
+end note
+@enduml

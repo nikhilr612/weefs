@@ -1,0 +1,51 @@
+@startuml activity-diagram-nfs-operations
+title NFS / SFTP File Operations — Extract, Copy, Delete
+
+start
+
+:User selects file(s) in NFS tree
+and triggers operation
+(extract, copy, delete);
+
+:ArchiveController dispatches
+to appropriate method;
+
+if (isRemoteMounted()?) then (no)
+    :Show "No remote mounted" error\nvia UIUtils.showError();
+    stop
+endif
+
+if (Operation?) then (extractNfsSelected)
+    :Determine mount type;
+    if (model.isRemoteMounted()?) then (SFTP)
+        :fileOps = getNfsFileOps()\nreturns IFileOperations (DIP);
+        :NfsFileOperations.requireConfig()\nthrows if config null (DRY);
+        :Iterate selected NfsPath entries;
+        :NfsFileOperations.copyFile(\n  remotePath, localDestination);
+        :NfsSftpFsProvider.get(config, path)\nstreams bytes via NfsSyncingByteChannel;
+        :Write to local destination via FileUtils;
+    else (legacy NFS)
+        :NfsIO.downloadFile(config, path, dest);
+    endif
+else if (Operation == copyFile) then (yes)
+    :NfsFileOperations.requireConfig();
+    :NfsSftpFsProvider.get(config, src);
+    :NfsSftpFsProvider.put(config, dest, stream);
+else if (Operation == deleteFile) then (yes)
+    :NfsFileOperations.requireConfig();
+    :NfsSftpFsProvider.delete(config, path);
+    :If directory: FileUtils.deleteRecursively(path)\n(DRY: single implementation);
+else (moveFile)
+    :NfsFileOperations.requireConfig();
+    :copyFile then deleteFile;
+endif
+
+if (Operation succeeded?) then (yes)
+    :Refresh NFS directory listing;
+    :Update ArchiveTreePanel;
+else (no)
+    :UIUtils.showError(parent, msg, ex)\n(DRY: single error dialog);
+endif
+
+stop
+@enduml
