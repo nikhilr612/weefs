@@ -1,17 +1,17 @@
 package io.wfs.core.nfs;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessMode;
 import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
-import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.ProviderMismatchException;
@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.nio.file.StandardCopyOption;
 
 /**
  * SFTP-backed provider for the weefs:// URI scheme.
@@ -47,10 +48,12 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         Map<String, ?> safeEnv = env == null ? Collections.emptyMap() : env;
 
         NfsParsedUri parsed = NfsParsedUri.parse(uri, getScheme());
-        String key = toKey(parsed);
+        String key = toMountKey(parsed.username(), parsed.host(), parsed.port(), parsed.remotePath());
 
-        if (mounted.containsKey(key)) {
-            throw new FileSystemAlreadyExistsException("Remote location already mounted: " + uri);
+        NfsFileSystem existing = mounted.get(key);
+        if (existing != null && existing.isOpen()) {
+            // Reusing a mounted instance avoids duplicate connections for the same remote root.
+            return existing;
         }
 
         String password = System.getenv(parsed.authEnvVar());
@@ -72,9 +75,10 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         NfsSftpFsIO.ensureMountRootExists(config);
         NfsFileSystem fs = new NfsFileSystem(this, config, readOnly);
 
-        NfsFileSystem previous = mounted.putIfAbsent(key, fs);
-        if (previous != null) {
-            throw new FileSystemAlreadyExistsException("Remote location already mounted: " + uri);
+        NfsFileSystem raced = mounted.putIfAbsent(key, fs);
+        if (raced != null && raced.isOpen()) {
+            // Another thread won the race; return that mounted instance for consistent reuse.
+            return raced;
         }
 
         fs.installShutdownHook();
@@ -84,7 +88,7 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
     @Override
     public FileSystem getFileSystem(URI uri) {
         NfsParsedUri parsed = NfsParsedUri.parse(uri, getScheme());
-        NfsFileSystem fs = mounted.get(toKey(parsed));
+        NfsFileSystem fs = mounted.get(toMountKey(parsed.username(), parsed.host(), parsed.port(), parsed.remotePath()));
         if (fs == null || !fs.isOpen()) {
             throw new FileSystemNotFoundException("No mounted remote file system for URI: " + uri);
         }
@@ -94,20 +98,18 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
     @Override
     public Path getPath(URI uri) {
         NfsParsedUri parsed = NfsParsedUri.parse(uri, getScheme());
-        String key = toKey(parsed);
-        NfsFileSystem fs = mounted.get(key);
+        NfsFileSystem fs = findMountedFor(parsed);
 
         if (fs == null || !fs.isOpen()) {
             try {
                 fs = (NfsFileSystem) newFileSystem(uri, Collections.emptyMap());
-            } catch (FileSystemAlreadyExistsException ex) {
-                fs = mounted.get(key);
             } catch (IOException ioEx) {
                 throw new IllegalArgumentException("Unable to create file system for URI: " + uri, ioEx);
             }
         }
 
-        return fs.getPath("/");
+        String internal = toInternalPath(fs.config().remoteRoot(), parsed.remotePath());
+        return fs.getPath(internal);
     }
 
     @Override
@@ -134,7 +136,7 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         }
 
         if (!exists && !create && !createNew) {
-            throw new FileNotFoundException(nfsPath.toString());
+            throw new NoSuchFileException(nfsPath.toString());
         }
 
         byte[] initial = new byte[0];
@@ -149,10 +151,17 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
                     initial = NfsSftpFsIO.readFile(fs.config(), remotePath);
                 }
             } else {
-                initialDirty = true;
+                // Apply truncation immediately at open time, per NIO semantics.
+                NfsSftpFsIO.writeFile(fs.config(), remotePath, new byte[0], true);
             }
         } else {
-            initialDirty = create || createNew;
+            // CREATE/CREATE_NEW should materialize the file immediately at open time.
+            NfsSftpFsIO.createFile(fs.config(), remotePath, createNew);
+        }
+
+        if (truncate || !exists) {
+            initial = new byte[0];
+            initialDirty = false;
         }
 
         return new NfsSyncingByteChannel(fs, nfsPath, readable, writable, initial, append, initialDirty);
@@ -190,8 +199,10 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         fs.ensureWritable();
 
         String remotePath = fs.toRemotePath(nfsPath);
-        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(fs.config(), remotePath);
-        if (stat.directory()) {
+        NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.lstat(fs.config(), remotePath);
+        if (stat.symbolicLink()) {
+            NfsSftpFsIO.deleteFile(fs.config(), remotePath);
+        } else if (stat.directory()) {
             NfsSftpFsIO.deleteDirectory(fs.config(), remotePath);
         } else {
             NfsSftpFsIO.deleteFile(fs.config(), remotePath);
@@ -205,6 +216,8 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         NfsFileSystem fs = dst.getNfsFileSystem();
         fs.ensureWritable();
 
+        boolean replaceExisting = hasReplaceExisting(options);
+
         String srcRemote = src.getNfsFileSystem().toRemotePath(src);
         String dstRemote = dst.getNfsFileSystem().toRemotePath(dst);
         NfsSftpFsIO.RemoteFileStat stat = NfsSftpFsIO.stat(src.getNfsFileSystem().config(), srcRemote);
@@ -212,6 +225,19 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         if (stat.directory()) {
             throw new UnsupportedOperationException("Directory copy is not supported");
         }
+
+        if (NfsSftpFsIO.exists(dst.getNfsFileSystem().config(), dstRemote)) {
+            if (!replaceExisting) {
+                throw new FileAlreadyExistsException(dst.toString());
+            }
+            NfsSftpFsIO.RemoteFileStat dstStat = NfsSftpFsIO.lstat(dst.getNfsFileSystem().config(), dstRemote);
+            if (dstStat.directory() && !dstStat.symbolicLink()) {
+                NfsSftpFsIO.deleteDirectory(dst.getNfsFileSystem().config(), dstRemote);
+            } else {
+                NfsSftpFsIO.deleteFile(dst.getNfsFileSystem().config(), dstRemote);
+            }
+        }
+
         NfsSftpFsIO.copyFile(src.getNfsFileSystem().config(), srcRemote, dstRemote);
     }
 
@@ -222,8 +248,23 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         NfsFileSystem fs = dst.getNfsFileSystem();
         fs.ensureWritable();
 
+        boolean replaceExisting = hasReplaceExisting(options);
+
         String srcRemote = src.getNfsFileSystem().toRemotePath(src);
         String dstRemote = dst.getNfsFileSystem().toRemotePath(dst);
+
+        if (NfsSftpFsIO.exists(dst.getNfsFileSystem().config(), dstRemote)) {
+            if (!replaceExisting) {
+                throw new FileAlreadyExistsException(dst.toString());
+            }
+            NfsSftpFsIO.RemoteFileStat dstStat = NfsSftpFsIO.lstat(dst.getNfsFileSystem().config(), dstRemote);
+            if (dstStat.directory() && !dstStat.symbolicLink()) {
+                NfsSftpFsIO.deleteDirectory(dst.getNfsFileSystem().config(), dstRemote);
+            } else {
+                NfsSftpFsIO.deleteFile(dst.getNfsFileSystem().config(), dstRemote);
+            }
+        }
+
         NfsSftpFsIO.move(src.getNfsFileSystem().config(), srcRemote, dstRemote);
     }
 
@@ -307,8 +348,45 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
         mounted.entrySet().removeIf(entry -> entry.getValue() == fs);
     }
 
-    private String toKey(NfsParsedUri parsed) {
-        return parsed.username() + "@" + parsed.host() + ":" + parsed.port() + parsed.remotePath();
+    private static String toMountKey(String username, String host, int port, String remoteRoot) {
+        return username + "@" + host + ":" + port + NfsSftpFsIO.normalizeRemotePath(remoteRoot);
+    }
+
+    private NfsFileSystem findMountedFor(NfsParsedUri parsed) {
+        NfsFileSystem best = null;
+        int bestLen = -1;
+        String requested = NfsSftpFsIO.normalizeRemotePath(parsed.remotePath());
+
+        for (NfsFileSystem candidate : mounted.values()) {
+            if (!candidate.isOpen()) {
+                continue;
+            }
+            NfsSftpConfig cfg = candidate.config();
+            if (!cfg.username().equals(parsed.username()) || !cfg.host().equals(parsed.host()) || cfg.port() != parsed.port()) {
+                continue;
+            }
+
+            String root = NfsSftpFsIO.normalizeRemotePath(cfg.remoteRoot());
+            boolean matches = requested.equals(root) || requested.startsWith(root + "/");
+            if (matches && root.length() > bestLen) {
+                best = candidate;
+                bestLen = root.length();
+            }
+        }
+        return best;
+    }
+
+    private static String toInternalPath(String remoteRoot, String requestedPath) {
+        String root = NfsSftpFsIO.normalizeRemotePath(remoteRoot);
+        String requested = NfsSftpFsIO.normalizeRemotePath(requestedPath);
+        if (requested.equals(root)) {
+            return "/";
+        }
+        if (!requested.startsWith(root + "/")) {
+            return requested;
+        }
+        String suffix = requested.substring(root.length());
+        return suffix.isBlank() ? "/" : suffix;
     }
 
     private static String joinVirtual(String parent, String child) {
@@ -344,5 +422,23 @@ public final class NfsSftpFsProvider extends FileSystemProvider {
             resolved.add(StandardOpenOption.WRITE);
         }
         return resolved;
+    }
+
+    private static boolean hasReplaceExisting(CopyOption... options) {
+        boolean replace = false;
+        if (options == null) {
+            return false;
+        }
+        for (CopyOption option : options) {
+            if (!(option instanceof StandardCopyOption std)) {
+                throw new UnsupportedOperationException("Unsupported copy/move option: " + option);
+            }
+            if (std == StandardCopyOption.REPLACE_EXISTING) {
+                replace = true;
+            } else {
+                throw new UnsupportedOperationException("Unsupported copy/move option: " + std);
+            }
+        }
+        return replace;
     }
 }

@@ -11,8 +11,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -120,9 +122,7 @@ final class NfsSftpFsIO {
         });
 
         return withChannel(config, channel -> {
-            @SuppressWarnings("unchecked")
-            // ChannelSftp#ls returns raw Vector from legacy API; each element is documented LsEntry.
-            Vector<ChannelSftp.LsEntry> entries = channel.ls(remoteDirectory);
+            List<ChannelSftp.LsEntry> entries = safeList(channel, remoteDirectory);
             List<RemoteEntry> result = new ArrayList<>(entries.size());
             for (ChannelSftp.LsEntry entry : entries) {
                 String name = entry.getFilename();
@@ -157,6 +157,16 @@ final class NfsSftpFsIO {
             SftpATTRS linkAttrs = lstatOrNull(channel, remotePath);
             boolean symbolicLink = linkAttrs != null && linkAttrs.isLink();
             return new RemoteFileStat(attrs.isDir(), symbolicLink, attrs.getSize(), toFileTime(attrs));
+        });
+    }
+
+    static RemoteFileStat lstat(NfsSftpConfig config, String remotePath) throws IOException {
+        return withChannel(config, channel -> {
+            SftpATTRS attrs = lstatOrNull(channel, remotePath);
+            if (attrs == null) {
+                throw new NoSuchFileException(remotePath);
+            }
+            return new RemoteFileStat(attrs.isDir(), attrs.isLink(), attrs.getSize(), toFileTime(attrs));
         });
     }
 
@@ -245,9 +255,7 @@ final class NfsSftpFsIO {
                 throw new IOException("Path is not a directory: " + remoteDirectory);
             }
 
-            @SuppressWarnings("unchecked")
-            // ChannelSftp#ls returns raw Vector from legacy API; each element is documented LsEntry.
-            Vector<ChannelSftp.LsEntry> entries = channel.ls(remoteDirectory);
+            List<ChannelSftp.LsEntry> entries = safeList(channel, remoteDirectory);
             for (ChannelSftp.LsEntry entry : entries) {
                 String name = entry.getFilename();
                 if (!".".equals(name) && !"..".equals(name)) {
@@ -296,9 +304,10 @@ final class NfsSftpFsIO {
         ChannelSftp channel = null;
         try {
             JSch jsch = new JSch();
+            configureKnownHosts(jsch);
             session = jsch.getSession(config.username(), config.host(), config.port());
             session.setPassword(config.password());
-            session.setConfig("StrictHostKeyChecking", "no");
+            session.setConfig("StrictHostKeyChecking", resolveStrictHostKeyChecking());
             session.connect(15_000);
 
             Channel raw = session.openChannel("sftp");
@@ -378,6 +387,13 @@ final class NfsSftpFsIO {
         }
     }
 
+    private static List<ChannelSftp.LsEntry> safeList(ChannelSftp channel, String path) throws SftpException {
+        @SuppressWarnings("unchecked")
+        // JSch returns a raw Vector; per API contract, elements are ChannelSftp.LsEntry.
+        Vector<ChannelSftp.LsEntry> vec = channel.ls(path);
+        return new ArrayList<>(vec);
+    }
+
     static String join(String base, String child) {
         String left = normalizeRemotePath(base);
         String right = child == null ? "" : child.replace('\\', '/');
@@ -407,5 +423,36 @@ final class NfsSftpFsIO {
 
     private static FileTime toFileTime(SftpATTRS attrs) {
         return FileTime.fromMillis(attrs.getMTime() * 1000L);
+    }
+
+    private static String resolveStrictHostKeyChecking() {
+        String raw = System.getenv("WEEFS_SFTP_STRICT_HOST_KEY_CHECKING");
+        if (raw == null || raw.isBlank()) {
+            return "yes";
+        }
+
+        String normalized = raw.trim().toLowerCase();
+        if ("no".equals(normalized) || "off".equals(normalized) || "false".equals(normalized) || "0".equals(normalized)) {
+            return "no";
+        }
+        return "yes";
+    }
+
+    private static void configureKnownHosts(JSch jsch) throws IOException {
+        String strict = resolveStrictHostKeyChecking();
+        if (!"yes".equalsIgnoreCase(strict)) {
+            return;
+        }
+
+        Path knownHosts = Path.of(System.getProperty("user.home"), ".ssh", "known_hosts");
+        if (!Files.exists(knownHosts)) {
+            throw new IOException("Strict host key checking is enabled, but known_hosts is missing at: " + knownHosts);
+        }
+
+        try {
+            jsch.setKnownHosts(knownHosts.toString());
+        } catch (JSchException ex) {
+            throw new IOException("Failed to load known_hosts from: " + knownHosts, ex);
+        }
     }
 }

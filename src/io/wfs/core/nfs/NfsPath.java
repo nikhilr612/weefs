@@ -68,7 +68,7 @@ final class NfsPath implements Path {
         if (fileName == null) {
             return null;
         }
-        return new NfsPath(fileSystem, fileName.toString());
+        return Path.of(fileName.toString());
     }
 
     @Override
