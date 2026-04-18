@@ -5,40 +5,46 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.ProviderMismatchException;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Objects;
 
-/**
- * NFS path implementation compliant with java.nio.file.Path interface.
- * Represents a path within an NFS-mounted file system.
- * Immutable and thread-safe.
- */
 final class NfsPath implements Path {
 
     private final NfsFileSystem fileSystem;
-    private final String path;
+    private final String virtualPath;
+    private final Path delegate;
 
-    NfsPath(NfsFileSystem fileSystem, String path) {
-        this.fileSystem = Objects.requireNonNull(fileSystem);
-        this.path = normalizePath(path);
+    NfsPath(NfsFileSystem fileSystem, String virtualPath) {
+        this.fileSystem = fileSystem;
+        this.virtualPath = normalizeVirtualPath(virtualPath);
+        this.delegate = Path.of(this.virtualPath);
     }
 
-    private static String normalizePath(String path) {
-        if (path == null || path.isEmpty()) {
-            return "/";
+    NfsFileSystem getNfsFileSystem() {
+        return fileSystem;
+    }
+
+    String virtualPath() {
+        return virtualPath;
+    }
+
+    private NfsPath requireSameProvider(Path path) {
+        if (!(path instanceof NfsPath)) {
+            throw new ProviderMismatchException("Path is not a weefs path: " + path);
         }
-        // Normalize separators
-        String normalized = path.replace("\\", "/");
-        // Remove trailing slashes except for root
-        while (normalized.length() > 1 && normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
+        NfsPath other = (NfsPath) path;
+        if (fileSystem != other.fileSystem) {
+            throw new ProviderMismatchException("Paths belong to different weefs file systems");
         }
-        return normalized;
+        return other;
+    }
+
+    private String toVirtualString() {
+        return virtualPath;
     }
 
     @Override
@@ -48,207 +54,218 @@ final class NfsPath implements Path {
 
     @Override
     public boolean isAbsolute() {
-        return path.startsWith("/");
+        return delegate.isAbsolute();
     }
 
     @Override
     public Path getRoot() {
-        return new NfsPath(fileSystem, "/");
+        Path root = delegate.getRoot();
+        return root == null ? null : new NfsPath(fileSystem, root.toString());
     }
 
     @Override
     public Path getFileName() {
-        int lastSlash = path.lastIndexOf('/');
-        if (lastSlash < 0 || lastSlash == path.length() - 1) {
+        Path fileName = delegate.getFileName();
+        if (fileName == null) {
             return null;
         }
-        return new NfsPath(fileSystem, path.substring(lastSlash + 1));
+        return new NfsPath(fileSystem, fileName.toString());
     }
 
     @Override
     public Path getParent() {
-        int lastSlash = path.lastIndexOf('/');
-        if (lastSlash <= 0) {
+        Path parent = delegate.getParent();
+        if (parent == null) {
             return null;
         }
-        return new NfsPath(fileSystem, path.substring(0, lastSlash));
+        return new NfsPath(fileSystem, parent.toString());
     }
 
     @Override
     public int getNameCount() {
-        if (path.equals("/")) {
-            return 0;
-        }
-        String normalized = path.startsWith("/") ? path.substring(1) : path;
-        if (normalized.isEmpty()) {
-            return 0;
-        }
-        return normalized.split("/").length;
+        return delegate.getNameCount();
     }
 
     @Override
     public Path getName(int index) {
-        if (index < 0 || index >= getNameCount()) {
-            throw new IllegalArgumentException("Invalid name index: " + index);
-        }
-        String normalized = path.startsWith("/") ? path.substring(1) : path;
-        String[] parts = normalized.split("/");
-        return new NfsPath(fileSystem, parts[index]);
+        return new NfsPath(fileSystem, delegate.getName(index).toString());
     }
 
     @Override
     public Path subpath(int beginIndex, int endIndex) {
-        int count = getNameCount();
-        if (beginIndex < 0 || endIndex > count || beginIndex >= endIndex) {
-            throw new IllegalArgumentException("Invalid indices");
-        }
-        String normalized = path.startsWith("/") ? path.substring(1) : path;
-        String[] parts = normalized.split("/");
-        StringBuilder sb = new StringBuilder();
-        for (int i = beginIndex; i < endIndex; i++) {
-            if (i > beginIndex) sb.append("/");
-            sb.append(parts[i]);
-        }
-        return new NfsPath(fileSystem, sb.toString());
+        return new NfsPath(fileSystem, delegate.subpath(beginIndex, endIndex).toString());
     }
 
     @Override
     public boolean startsWith(Path other) {
-        if (!(other instanceof NfsPath)) {
-            return false;
-        }
-        return path.startsWith(((NfsPath) other).path);
+        NfsPath ext = requireSameProvider(other);
+        return delegate.startsWith(ext.delegate);
     }
 
     @Override
     public boolean startsWith(String other) {
-        return path.startsWith(normalizePath(other));
+        return toVirtualString().startsWith(other.replace(File.separatorChar, '/'));
     }
 
     @Override
     public boolean endsWith(Path other) {
-        if (!(other instanceof NfsPath)) {
-            return false;
-        }
-        return path.endsWith(((NfsPath) other).path);
+        NfsPath ext = requireSameProvider(other);
+        return delegate.endsWith(ext.delegate);
     }
 
     @Override
     public boolean endsWith(String other) {
-        return path.endsWith(normalizePath(other));
+        return toVirtualString().endsWith(other.replace(File.separatorChar, '/'));
     }
 
     @Override
     public Path normalize() {
-        return this; // Already normalized
+        return new NfsPath(fileSystem, delegate.normalize().toString());
     }
 
     @Override
     public Path resolve(Path other) {
-        if (!(other instanceof NfsPath)) {
-            throw new IllegalArgumentException("Cannot resolve non-NFS path");
-        }
-        String otherPath = ((NfsPath) other).path;
-        if (otherPath.startsWith("/")) {
-            return new NfsPath(fileSystem, otherPath);
-        }
-        if (path.equals("/")) {
-            return new NfsPath(fileSystem, "/" + otherPath);
-        }
-        return new NfsPath(fileSystem, path + "/" + otherPath);
+        NfsPath ext = requireSameProvider(other);
+        return new NfsPath(fileSystem, delegate.resolve(ext.delegate).toString());
     }
 
     @Override
     public Path resolve(String other) {
-        return resolve(new NfsPath(fileSystem, other));
+        return new NfsPath(fileSystem, delegate.resolve(other).toString());
     }
 
     @Override
     public Path resolveSibling(Path other) {
-        Path parent = getParent();
-        if (parent == null) {
-            return other;
-        }
-        return parent.resolve(other);
+        NfsPath ext = requireSameProvider(other);
+        return new NfsPath(fileSystem, delegate.resolveSibling(ext.delegate).toString());
     }
 
     @Override
     public Path resolveSibling(String other) {
-        return resolveSibling(new NfsPath(fileSystem, other));
+        return new NfsPath(fileSystem, delegate.resolveSibling(other).toString());
     }
 
     @Override
     public Path relativize(Path other) {
-        throw new UnsupportedOperationException("Relativization not supported for NFS paths");
+        if (!fileSystem.hasSftpConfig()) {
+            throw new UnsupportedOperationException("Relativization not supported for legacy NFS paths");
+        }
+        NfsPath ext = requireSameProvider(other);
+        return new NfsPath(fileSystem, delegate.relativize(ext.delegate).toString());
     }
 
     @Override
     public URI toUri() {
-        throw new UnsupportedOperationException("URI conversion not supported for NFS paths");
+        if (!fileSystem.hasSftpConfig()) {
+            throw new UnsupportedOperationException("URI conversion not supported for legacy NFS paths");
+        }
+        NfsSftpConfig cfg = fileSystem.config();
+        String internal = toVirtualString();
+        String uriPath = cfg.remoteRoot();
+        String authority = cfg.username() + "@" + cfg.host();
+        if ("/".equals(internal)) {
+            return URI.create("weefs://" + authority + uriPath + "?auth=" + cfg.authEnvVar());
+        }
+        String suffix = internal.startsWith("/") ? internal.substring(1) : internal;
+        String joined = uriPath.endsWith("/") ? uriPath + suffix : uriPath + "/" + suffix;
+        return URI.create("weefs://" + authority + joined + "?auth=" + cfg.authEnvVar());
     }
 
     @Override
     public Path toAbsolutePath() {
-        return isAbsolute() ? this : new NfsPath(fileSystem, "/" + path);
+        return isAbsolute() ? this : new NfsPath(fileSystem, "/" + virtualPath);
     }
 
     @Override
     public Path toRealPath(LinkOption... options) throws IOException {
-        // NFS doesn't support symbolic links in this implementation
         return toAbsolutePath();
     }
 
     @Override
     public File toFile() {
-        throw new UnsupportedOperationException("File conversion not supported for NFS paths");
+        throw new UnsupportedOperationException("NFS paths do not map to local files");
     }
 
     @Override
-    public WatchKey register(WatchService watcher, WatchEvent.Kind<?>[] events,
-                             WatchEvent.Modifier... modifiers) throws IOException {
-        throw new UnsupportedOperationException("Watch service not supported for NFS paths");
-    }
-
-    @Override
-    public WatchKey register(WatchService watcher, WatchEvent.Kind<?>... events) throws IOException {
-        throw new UnsupportedOperationException("Watch service not supported for NFS paths");
+    public WatchKey register(WatchService watcher, WatchEvent.Kind<?>[] events, WatchEvent.Modifier... modifiers)
+            throws IOException {
+        throw new UnsupportedOperationException("Watch service is not supported for weefs SFTP");
     }
 
     @Override
     public Iterator<Path> iterator() {
-        List<Path> parts = new ArrayList<>();
-        Path current = this;
-        while (current != null && !current.toString().equals("/")) {
-            parts.add(0, current.getFileName());
-            current = current.getParent();
-        }
-        return parts.iterator();
+        Iterator<Path> iterator = delegate.iterator();
+        return new NfsPathIterator(fileSystem, iterator);
     }
 
     @Override
     public int compareTo(Path other) {
-        if (!(other instanceof NfsPath)) {
-            throw new ClassCastException("Cannot compare with non-NFS path");
-        }
-        return path.compareTo(((NfsPath) other).path);
+        NfsPath ext = requireSameProvider(other);
+        return delegate.compareTo(ext.delegate);
     }
 
     @Override
     public String toString() {
-        return path;
+        return toVirtualString();
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof NfsPath)) return false;
-        NfsPath nfsPath = (NfsPath) o;
-        return Objects.equals(path, nfsPath.path) &&
-                Objects.equals(fileSystem, nfsPath.fileSystem);
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof NfsPath)) {
+            return false;
+        }
+        NfsPath other = (NfsPath) obj;
+        return fileSystem == other.fileSystem && Objects.equals(delegate, other.delegate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, fileSystem);
+        return Objects.hash(System.identityHashCode(fileSystem), virtualPath);
+    }
+
+    private static String normalizeVirtualPath(String raw) {
+        String value = raw == null ? "" : raw.replace('\\', '/').trim();
+        if (value.isBlank()) {
+            return "/";
+        }
+
+        boolean absolute = value.startsWith("/");
+        String[] parts = value.split("/+");
+        String[] normalized = new String[parts.length];
+        int count = 0;
+
+        for (String part : parts) {
+            if (part.isEmpty() || ".".equals(part)) {
+                continue;
+            }
+            if ("..".equals(part)) {
+                if (count > 0 && !"..".equals(normalized[count - 1])) {
+                    count--;
+                } else if (!absolute) {
+                    normalized[count++] = part;
+                }
+                continue;
+            }
+            normalized[count++] = part;
+        }
+
+        StringBuilder result = new StringBuilder();
+        if (absolute) {
+            result.append('/');
+        }
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                result.append('/');
+            }
+            result.append(normalized[i]);
+        }
+
+        if (result.length() == 0) {
+            return absolute ? "/" : "";
+        }
+        return result.toString();
     }
 }

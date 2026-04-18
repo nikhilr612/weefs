@@ -1,8 +1,7 @@
 package io.wfs.main;
 
-import io.wfs.ui.MainLauncher;
-import io.wfs.core.nfs.CoreNfsPathTest;
 import io.wfs.core.extractor.CoreExtractorUriTest;
+import io.wfs.core.nfs.CoreNfsPathTest;
 
 public class App {
 
@@ -11,15 +10,13 @@ public class App {
             String command = args[0].toLowerCase();
             switch (command) {
                 case "integration":
-                    System.out.println("Running archive integration tests...");
                     ArchiveIntegrationTest.run();
+                    NFSIntegrationTest.runIfConfigured();
                     break;
                 case "nfs-integration":
-                    System.out.println("Running NFS integration tests...");
                     NfsIntegrationTest.run();
                     break;
                 case "unit":
-                    System.out.println("Running unit tests...");
                     CoreExtractorTest.run();
                     CoreExtractorUriTest.run();
                     CoreNfsTest.run();
@@ -28,7 +25,6 @@ public class App {
                     UtilTest.run();
                     break;
                 case "all-integration":
-                    System.out.println("Running all tests...");
                     CoreExtractorTest.run();
                     CoreExtractorUriTest.run();
                     CoreNfsTest.run();
@@ -37,9 +33,10 @@ public class App {
                     UtilTest.run();
                     ArchiveIntegrationTest.run();
                     NfsIntegrationTest.run();
+                    NFSIntegrationTest.runIfConfigured();
                     break;
                 case "gui":
-                    MainLauncher.main(args);
+                    io.wfs.ui.WeeFsApp.start();
                     break;
                 default:
                     printUsage();
@@ -50,12 +47,11 @@ public class App {
     }
 
     private static void printUsage() {
-        System.out.println("WeEFS - Web File System");
         System.out.println("Usage:");
-        System.out.println("  integration       - Run archive integration tests");
-        System.out.println("  nfs-integration   - Run NFS integration tests");
+        System.out.println("  integration       - Run archive integration tests (+ optional remote NFS round-trip)");
+        System.out.println("  nfs-integration   - Run local NFS adapter integration tests");
         System.out.println("  unit              - Run unit tests (extractor, NFS, model)");
-        System.out.println("  all-integration   - Run all tests (unit + integration)");
+        System.out.println("  all-integration   - Run unit + integration tests");
         System.out.println("  gui               - Launch GUI application");
     }
 }

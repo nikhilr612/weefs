@@ -61,6 +61,12 @@ public interface IArchiveController {
     void openArchive();
 
     /**
+     * Prompts the user for a weefs:// URI and mounts an SFTP-backed
+     * remote file system.
+     */
+    void mountNfs();
+
+    /**
      * Prompts the user to choose a destination path and format,
      * then creates and mounts a new empty archive.
      */

@@ -1,6 +1,9 @@
 jtar_version := "2.3"
 jtar_jar     := "lib/jtar-" + jtar_version + ".jar"
 jtar_url     := "https://repo1.maven.org/maven2/org/kamranzafar/jtar/" + jtar_version + "/jtar-" + jtar_version + ".jar"
+jsch_version := "0.1.55"
+jsch_jar     := "lib/jsch-" + jsch_version + ".jar"
+jsch_url     := "https://repo1.maven.org/maven2/com/jcraft/jsch/" + jsch_version + "/jsch-" + jsch_version + ".jar"
 
 commons_compress_version := "1.27.1"
 commons_compress_jar     := "lib/commons-compress-" + commons_compress_version + ".jar"
@@ -21,6 +24,7 @@ deps:
 	[ -f "{{commons_compress_jar}}" ] || curl -fsSL -o "{{commons_compress_jar}}" "{{commons_compress_url}}"
 	[ -f "{{xz_jar}}" ] || curl -fsSL -o "{{xz_jar}}" "{{xz_url}}"
 	[ -f "{{commons_io_jar}}" ] || curl -fsSL -o "{{commons_io_jar}}" "{{commons_io_url}}"
+	[ -f "{{jsch_jar}}" ] || curl -fsSL -o "{{jsch_jar}}" "{{jsch_url}}"
 
 build: deps
 	rm -f bin/artifact.jar
