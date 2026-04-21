@@ -118,13 +118,23 @@ public final class ArchiveTreePanel extends JPanel {
             }
         });
 
-        // Track hovered row to show/hide the close button
+        // Track hovered row to show/hide the close button.
+        // getRowForLocation only hits the icon+text cell bounds, so hovering in
+        // the empty space to the right of the label returns -1 and hides the ✕.
+        // getClosestRowForLocation + explicit y-bounds check covers the full row.
         tree.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                int row = tree.getRowForLocation(e.getX(), e.getY());
-                if (row != hoveredRow) {
-                    hoveredRow = row;
+                int newHovered = -1;
+                int row = tree.getClosestRowForLocation(e.getX(), e.getY());
+                if (row >= 0) {
+                    Rectangle rb = tree.getRowBounds(row);
+                    if (rb != null && e.getY() >= rb.y && e.getY() < rb.y + rb.height) {
+                        newHovered = row;
+                    }
+                }
+                if (newHovered != hoveredRow) {
+                    hoveredRow = newHovered;
                     tree.repaint();
                 }
             }
@@ -286,7 +296,7 @@ public final class ArchiveTreePanel extends JPanel {
                         DefaultMutableTreeNode node =
                                 (DefaultMutableTreeNode) path.getLastPathComponent();
                         if (node.getUserObject() instanceof SessionNodeData sd) {
-                            controller.closeSession(sd.sessionId());
+                            confirmAndClose(sd.sessionId());
                         }
                     }
                 }
@@ -306,7 +316,7 @@ public final class ArchiveTreePanel extends JPanel {
             SessionNodeData sd = (SessionNodeData) node.getUserObject();
 
             JMenuItem unmount = new JMenuItem("Unmount");
-            unmount.addActionListener(ev -> controller.closeSession(sd.sessionId()));
+            unmount.addActionListener(ev -> confirmAndClose(sd.sessionId()));
             menu.add(unmount);
 
             MountSession session = model.getSession(sd.sessionId());
@@ -384,7 +394,7 @@ public final class ArchiveTreePanel extends JPanel {
                 String label = sess != null ? "Unmount '" + sess.getLabel() + "'" : "Unmount";
                 menu.addSeparator();
                 JMenuItem unmount = new JMenuItem(label);
-                unmount.addActionListener(ev -> controller.closeSession(sessId));
+                unmount.addActionListener(ev -> confirmAndClose(sessId));
                 menu.add(unmount);
             }
         }
@@ -393,6 +403,26 @@ public final class ArchiveTreePanel extends JPanel {
     }
 
     // -- Helpers ----------------------------------------------------------------
+
+    /**
+     * Prompts the user to save unsaved changes before unmounting a writable archive session.
+     * For read-only, directories, or NFS sessions (write-through) it closes immediately.
+     */
+    private void confirmAndClose(String sessionId) {
+        MountSession session = model.getSession(sessionId);
+        if (session != null && session.isSaveable()) {
+            Window ancestor = SwingUtilities.getWindowAncestor(this);
+            int choice = JOptionPane.showConfirmDialog(
+                    ancestor,
+                    "Save changes to '" + session.getLabel() + "' before unmounting?",
+                    "Unsaved Changes",
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+            if (choice == JOptionPane.CANCEL_OPTION) return;
+            if (choice == JOptionPane.YES_OPTION) controller.saveSession(sessionId);
+        }
+        controller.closeSession(sessionId);
+    }
 
     private String findSessionId(DefaultMutableTreeNode node) {
         DefaultMutableTreeNode current = node;
