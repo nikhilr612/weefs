@@ -169,13 +169,6 @@ public interface IArchiveController {
     void extractSelected();
 
     /**
-     * Opens a "Save As..." dialog so the user can save the currently selected
-     * file to a chosen local path with a chosen name.
-     * No-op when a directory or nothing is selected.
-     */
-    void saveAs();
-
-    /**
      * Writes {@code content} to the file at {@code path} inside the
      * archive. Called by the content-viewer panel when the user saves
      * an open editor buffer.

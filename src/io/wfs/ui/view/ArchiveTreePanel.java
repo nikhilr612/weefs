@@ -363,10 +363,6 @@ public final class ArchiveTreePanel extends JPanel {
 
         FileNode sel = model.getSelectedFile();
 
-        JMenuItem saveAs = new JMenuItem("Save As...");
-        saveAs.addActionListener(ev -> controller.saveAs());
-        saveAs.setEnabled(sel != null && !sel.isDirectory());
-
         JMenuItem extract = new JMenuItem("Extract To...");
         extract.addActionListener(ev -> controller.extractSelected());
         extract.setEnabled(sel != null && !sel.isDirectory());
@@ -385,7 +381,6 @@ public final class ArchiveTreePanel extends JPanel {
         menu.add(rename);
         menu.add(delete);
         menu.addSeparator();
-        menu.add(saveAs);
         menu.add(extract);
         menu.addSeparator();
         menu.add(properties);
