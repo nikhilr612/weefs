@@ -11,6 +11,7 @@ public class App {
             switch (command) {
                 case "integration":
                     ArchiveIntegrationTest.run();
+                    ArchiveCopyTest.run();
                     NFSIntegrationTest.runIfConfigured();
                     break;
                 case "nfs-integration":
@@ -32,6 +33,7 @@ public class App {
                     ModelTest.run();
                     UtilTest.run();
                     ArchiveIntegrationTest.run();
+                    ArchiveCopyTest.run();
                     NfsIntegrationTest.run();
                     NFSIntegrationTest.runIfConfigured();
                     break;
