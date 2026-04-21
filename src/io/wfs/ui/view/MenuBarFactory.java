@@ -3,6 +3,7 @@ package io.wfs.ui.view;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.controller.INfsController;
 import io.wfs.ui.model.ArchiveModel;
+import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
@@ -221,6 +222,11 @@ public final class MenuBarFactory {
         refresh.addActionListener(e -> model.fireTreeRefresh());
 
         menu.add(refresh);
+        menu.addSeparator();
+
+        JCheckBoxMenuItem darkTheme = new JCheckBoxMenuItem("Dark Theme");
+        darkTheme.addActionListener(e -> SwingUtils.toggleTheme());
+        menu.add(darkTheme);
 
         return menu;
     }

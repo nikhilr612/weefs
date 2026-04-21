@@ -120,8 +120,7 @@ public final class ToolBarFactory {
             btn.setIcon(icon);
         }
         btn.setToolTipText(tooltip);
-        btn.setFocusPainted(false);
-        btn.setMargin(new Insets(4, 8, 4, 8));
+        btn.putClientProperty("JButton.buttonType", "toolBarButton");
         return btn;
     }
 }

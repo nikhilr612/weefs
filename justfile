@@ -17,6 +17,10 @@ commons_io_version := "2.18.0"
 commons_io_jar     := "lib/commons-io-" + commons_io_version + ".jar"
 commons_io_url     := "https://repo1.maven.org/maven2/commons-io/commons-io/" + commons_io_version + "/commons-io-" + commons_io_version + ".jar"
 
+flatlaf_version := "3.5.4"
+flatlaf_jar     := "lib/flatlaf-" + flatlaf_version + ".jar"
+flatlaf_url     := "https://repo1.maven.org/maven2/com/formdev/flatlaf/" + flatlaf_version + "/flatlaf-" + flatlaf_version + ".jar"
+
 # Download jtar from Maven Central if it is not already present
 deps:
 	mkdir -p lib
@@ -25,6 +29,7 @@ deps:
 	[ -f "{{xz_jar}}" ] || curl -fsSL -o "{{xz_jar}}" "{{xz_url}}"
 	[ -f "{{commons_io_jar}}" ] || curl -fsSL -o "{{commons_io_jar}}" "{{commons_io_url}}"
 	[ -f "{{jsch_jar}}" ] || curl -fsSL -o "{{jsch_jar}}" "{{jsch_url}}"
+	[ -f "{{flatlaf_jar}}" ] || curl -fsSL -o "{{flatlaf_jar}}" "{{flatlaf_url}}"
 
 build: deps
 	rm -f bin/artifact.jar

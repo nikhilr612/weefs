@@ -44,7 +44,6 @@ public final class FileContentPanel extends JPanel {
         this.controller = controller;
 
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("File Viewer"));
 
         // ── Header bar ──
         JPanel header = new JPanel(new BorderLayout(8, 0));
@@ -94,7 +93,6 @@ public final class FileContentPanel extends JPanel {
         hexArea = new JTextArea();
         hexArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         hexArea.setEditable(false);
-        hexArea.setBackground(new Color(245, 245, 245));
         cards.add(new JScrollPane(hexArea), CARD_HEX);
 
         // Image preview
@@ -294,9 +292,13 @@ public final class FileContentPanel extends JPanel {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g;
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g2.setColor(new Color(240, 240, 240));
+            Color gutterBg = UIManager.getColor("Panel.background");
+            Color gutterFg = UIManager.getColor("Label.disabledForeground");
+            if (gutterBg == null) gutterBg = new Color(240, 240, 240);
+            if (gutterFg == null) gutterFg = new Color(160, 160, 160);
+            g2.setColor(gutterBg);
             g2.fillRect(0, 0, getWidth(), getHeight());
-            g2.setColor(new Color(160, 160, 160));
+            g2.setColor(gutterFg);
             g2.setFont(getFont());
 
             FontMetrics fm = g2.getFontMetrics();

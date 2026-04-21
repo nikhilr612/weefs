@@ -21,8 +21,9 @@ public final class StatusBarPanel extends JPanel {
 
     public StatusBarPanel(ArchiveModel model) {
         setLayout(new BorderLayout());
+        Color sepColor = UIManager.getColor("Separator.foreground");
         setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
+                BorderFactory.createMatteBorder(1, 0, 0, 0, sepColor != null ? sepColor : Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(3, 8, 3, 8)));
 
         archiveLabel = new JLabel("No archive open");
