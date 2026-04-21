@@ -2,6 +2,7 @@ package io.wfs.ui.controller;
 
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
+import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.UIUtils;
 
 import javax.swing.*;
@@ -59,7 +60,9 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public IFileOperations getFileOps() {
-        return isNfsMounted() ? nfsFileOps : fileOps;
+        boolean nfs = isNfsMounted();
+        if (nfs) nfsFileOps.setConfig(model.getNfsConfig());
+        return nfs ? nfsFileOps : fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
@@ -94,7 +97,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Opening directory...", () -> {
             try {
-                clearNfsIfMounted();
                 model.openDirectory(selected, readOnly);
             } catch (IOException ex) {
                 showError("Open Directory", ex);
@@ -132,7 +134,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Opening archive...", () -> {
             try {
-                clearNfsIfMounted();
                 model.openArchive(selected, readOnly);
             } catch (IOException ex) {
                 showError("Open Archive", ex);
@@ -223,7 +224,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Creating archive...", () -> {
             try {
-                clearNfsIfMounted();
                 model.createArchive(selectedWithExtension);
             } catch (IOException ex) {
                 showError("Create Archive", ex);
@@ -233,23 +233,31 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void closeArchive() {
-        executeInBackground("Closing archive...", () -> {
+        MountSession active = model.getActiveSession();
+        if (active == null) return;
+        closeSession(active.getId());
+    }
+
+    @Override
+    public void closeSession(String sessionId) {
+        executeInBackground("Closing...", () -> {
             try {
-                model.closeArchive();
+                model.closeSession(sessionId);
             } catch (IOException ex) {
-                showError("Close Archive", ex);
+                showError("Close", ex);
             }
         });
     }
 
     @Override
     public void saveArchive() {
-        if (!model.isOpen() || model.isReadOnly())
-            return;
+        if (!model.isOpen() || model.isReadOnly()) return;
         executeInBackground("Saving archive...", () -> {
             try {
+                MountSession active = model.getActiveSession();
+                if (active == null || active.isReadOnly()) return;
                 Path archiveToReopen = model.getArchivePath();
-                model.closeArchive();
+                model.closeSession(active.getId());
                 if (archiveToReopen != null) {
                     model.openArchive(archiveToReopen, false);
                 }
@@ -361,21 +369,17 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void unmountNfs() {
-        if (!model.isRemoteMounted() && !model.isNfsMounted()) {
-            return;
-        }
-
-        executeInBackground("Unmounting NFS...", () -> {
+        executeInBackground("Unmounting...", () -> {
             try {
-                if (model.isRemoteMounted()) {
-                    model.closeArchive();
-                } else {
-                    nfsFileOps.setConfig(null);
-                    model.setNfsConfig(null);
+                for (MountSession s : model.getSessions()) {
+                    if (s.isNfsMounted() || s.isRemoteMounted()) {
+                        if (s.isNfsMounted()) nfsFileOps.setConfig(null);
+                        model.closeSession(s.getId());
+                        break;
+                    }
                 }
-                model.fireTreeRefresh();
             } catch (Exception ex) {
-                showError("Unmount NFS", ex);
+                showError("Unmount", ex);
             }
         });
     }
@@ -542,12 +546,5 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     private void showError(String operation, Exception ex) {
         UIUtils.showError(parentComponent, operation, ex);
-    }
-
-    private void clearNfsIfMounted() throws IOException {
-        if (model.isNfsMounted()) {
-            nfsFileOps.setConfig(null);
-            model.setNfsConfig(null);
-        }
     }
 }

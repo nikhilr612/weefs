@@ -56,7 +56,7 @@ public final class MenuBarFactory {
             KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         mountNfs.addActionListener(e -> controller.mountNfs());
 
-        JMenuItem close = new JMenuItem("Close Archive");
+        JMenuItem close = new JMenuItem("Close Active Mount");
         close.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
         close.addActionListener(e -> controller.closeArchive());
 

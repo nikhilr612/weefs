@@ -3,6 +3,7 @@ package io.wfs.ui.view;
 import io.wfs.ui.controller.ArchiveController;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
+import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
@@ -78,22 +79,22 @@ public final class MainFrame extends JFrame {
     }
 
     private void handleExit() {
-        if (model.isOpen() && !model.isReadOnly()) {
+        boolean hasUnsaved = model.isOpen() &&
+                model.getSessions().stream().anyMatch(s -> !s.isReadOnly());
+        if (hasUnsaved) {
             int choice = JOptionPane.showConfirmDialog(this,
-                    "Save changes to the archive before closing?",
+                    "There are open writable mounts. Close them before exiting?",
                     "Unsaved Changes",
                     JOptionPane.YES_NO_CANCEL_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
-            if (choice == JOptionPane.CANCEL_OPTION) {
-                return; // Don't exit
-            }
+            if (choice == JOptionPane.CANCEL_OPTION) return;
             if (choice == JOptionPane.YES_OPTION) {
                 try {
-                    model.closeArchive(); // Close writes changes
+                    model.closeArchive();
                 } catch (IOException ex) {
                     JOptionPane.showMessageDialog(this,
-                            "Error saving: " + ex.getMessage(),
+                            "Error closing: " + ex.getMessage(),
                             "Error", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
@@ -101,11 +102,8 @@ public final class MainFrame extends JFrame {
         }
 
         try {
-            if (model.isOpen()) {
-                model.closeArchive();
-            }
-        } catch (IOException ignored) {
-        }
+            if (model.isOpen()) model.closeArchive();
+        } catch (IOException ignored) {}
 
         dispose();
         System.exit(0);

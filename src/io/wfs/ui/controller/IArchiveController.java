@@ -79,7 +79,15 @@ public interface IArchiveController {
     void createArchive();
 
     /**
-     * Flushes and unmounts the currently open archive.
+     * Closes and removes the mount session with the given ID.
+     * No-op if the ID is not found.
+     *
+     * @param sessionId the UUID of the session to close
+     */
+    void closeSession(String sessionId);
+
+    /**
+     * Flushes and unmounts the currently active archive session.
      * No-op if no archive is mounted.
      */
     void closeArchive();
