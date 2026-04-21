@@ -146,7 +146,8 @@ public final class ArchiveModel {
     public void closeArchive() throws IOException {
         boolean wasOpen = isOpen();
         boolean wasRemoteMounted = this.remoteMounted;
-        if (fileSystem != null && fileSystem.isOpen()) {
+        if (fileSystem != null && fileSystem.isOpen()
+                && fileSystem != java.nio.file.FileSystems.getDefault()) {
             fileSystem.close();
         }
         fileSystem = null;
