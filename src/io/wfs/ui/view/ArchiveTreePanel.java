@@ -239,17 +239,17 @@ public final class ArchiveTreePanel extends JPanel {
             showContextMenu(e);
             return;
         }
-        // Close-button click on session node
+        // Close-button click on session node (✕ is near right edge of tree)
         if (!e.isPopupTrigger() && e.getButton() == MouseEvent.BUTTON1) {
             int row = tree.getRowForLocation(e.getX(), e.getY());
             if (row >= 0) {
-                Rectangle bounds = tree.getRowBounds(row);
-                if (bounds != null && e.getX() >= bounds.x + bounds.width - 22) {
-                    TreePath path = tree.getPathForRow(row);
-                    if (path != null) {
-                        DefaultMutableTreeNode node =
-                                (DefaultMutableTreeNode) path.getLastPathComponent();
-                        if (node.getUserObject() instanceof SessionNodeData sd) {
+                TreePath path = tree.getPathForRow(row);
+                if (path != null) {
+                    DefaultMutableTreeNode node =
+                            (DefaultMutableTreeNode) path.getLastPathComponent();
+                    if (node.getUserObject() instanceof SessionNodeData sd) {
+                        // ✕ is within the last 22px of the tree's visible width
+                        if (e.getX() >= tree.getWidth() - 22) {
                             controller.closeSession(sd.sessionId());
                         }
                     }
@@ -282,6 +282,18 @@ public final class ArchiveTreePanel extends JPanel {
         newDir.addActionListener(ev -> controller.newDirectory());
         newDir.setEnabled(model.isOpen() && !model.isReadOnly());
 
+        JMenuItem copy = new JMenuItem("Copy");
+        copy.addActionListener(ev -> controller.copySelected());
+        copy.setEnabled(model.getSelectedFile() != null);
+
+        JMenuItem cut = new JMenuItem("Cut");
+        cut.addActionListener(ev -> controller.cutSelected());
+        cut.setEnabled(model.getSelectedFile() != null && !model.isReadOnly());
+
+        JMenuItem paste = new JMenuItem("Paste");
+        paste.addActionListener(ev -> controller.pasteSelected());
+        paste.setEnabled(controller.hasClipboard() && model.isOpen() && !model.isReadOnly());
+
         JMenuItem rename = new JMenuItem("Rename...");
         rename.addActionListener(ev -> controller.renameSelected());
         rename.setEnabled(model.getSelectedFile() != null && !model.isReadOnly());
@@ -301,6 +313,10 @@ public final class ArchiveTreePanel extends JPanel {
 
         menu.add(newFile);
         menu.add(newDir);
+        menu.addSeparator();
+        menu.add(copy);
+        menu.add(cut);
+        menu.add(paste);
         menu.addSeparator();
         menu.add(rename);
         menu.add(delete);
@@ -370,12 +386,18 @@ public final class ArchiveTreePanel extends JPanel {
 
             if (userObj instanceof SessionNodeData sd) {
                 // Session node — render as a panel with label + ✕
-                JPanel panel = new JPanel(new BorderLayout(4, 0));
-                panel.setOpaque(false);
+                // The panel stretches to the full tree width so ✕ aligns near the scrollbar.
+                JPanel panel = new JPanel(new BorderLayout(4, 0)) {
+                    @Override
+                    public Dimension getPreferredSize() {
+                        Dimension d = super.getPreferredSize();
+                        int fullWidth = t.getWidth() - 8;
+                        return new Dimension(Math.max(d.width, fullWidth), d.height);
+                    }
+                };
 
                 // Use base renderer just for background/border selection colours
                 super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, focused);
-                panel.setOpaque(isOpaque());
                 if (selected) panel.setBackground(getBackgroundSelectionColor());
                 else          panel.setBackground(getBackgroundNonSelectionColor());
                 panel.setOpaque(true);
@@ -389,7 +411,7 @@ public final class ArchiveTreePanel extends JPanel {
                 if (row == hoveredRow) {
                     JLabel close = new JLabel("✕");
                     close.setForeground(selected ? getTextSelectionColor() : Color.GRAY);
-                    close.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 2));
+                    close.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 6));
                     panel.add(close, BorderLayout.EAST);
                 }
 

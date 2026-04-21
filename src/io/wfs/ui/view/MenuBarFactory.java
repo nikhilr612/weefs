@@ -184,6 +184,18 @@ public final class MenuBarFactory {
                 KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         newDir.addActionListener(e -> controller.newDirectory());
 
+        JMenuItem copy = new JMenuItem("Copy");
+        copy.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK));
+        copy.addActionListener(e -> controller.copySelected());
+
+        JMenuItem cut = new JMenuItem("Cut");
+        cut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, InputEvent.CTRL_DOWN_MASK));
+        cut.addActionListener(e -> controller.cutSelected());
+
+        JMenuItem paste = new JMenuItem("Paste");
+        paste.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK));
+        paste.addActionListener(e -> controller.pasteSelected());
+
         JMenuItem rename = new JMenuItem("Rename...");
         rename.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0));
         rename.addActionListener(e -> controller.renameSelected());
@@ -198,6 +210,10 @@ public final class MenuBarFactory {
         menu.add(newFile);
         menu.add(newDir);
         menu.addSeparator();
+        menu.add(copy);
+        menu.add(cut);
+        menu.add(paste);
+        menu.addSeparator();
         menu.add(rename);
         menu.add(delete);
         menu.addSeparator();
@@ -206,11 +222,15 @@ public final class MenuBarFactory {
         // Enable/disable
         Runnable updateEditItems = () -> {
             boolean canEdit = model.isOpen() && !model.isReadOnly();
+            boolean hasSel = model.getSelectedFile() != null;
             newFile.setEnabled(canEdit);
             newDir.setEnabled(canEdit);
-            rename.setEnabled(canEdit && model.getSelectedFile() != null);
-            delete.setEnabled(canEdit && model.getSelectedFile() != null);
-            extract.setEnabled(model.isOpen() && model.getSelectedFile() != null
+            copy.setEnabled(hasSel);
+            cut.setEnabled(canEdit && hasSel);
+            paste.setEnabled(controller.hasClipboard() && canEdit);
+            rename.setEnabled(canEdit && hasSel);
+            delete.setEnabled(canEdit && hasSel);
+            extract.setEnabled(model.isOpen() && hasSel
                     && !model.getSelectedFile().isDirectory());
         };
         model.addPropertyChangeListener(evt -> SwingUtilities.invokeLater(updateEditItems));

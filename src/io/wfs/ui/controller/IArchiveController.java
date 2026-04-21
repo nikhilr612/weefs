@@ -79,6 +79,30 @@ public interface IArchiveController {
     void createArchive();
 
     /**
+     * Marks the currently selected file/directory for copying (non-destructive).
+     * No-op if nothing is selected.
+     */
+    void copySelected();
+
+    /**
+     * Marks the currently selected file/directory for moving (cut).
+     * No-op if nothing is selected.
+     */
+    void cutSelected();
+
+    /**
+     * Pastes the clipboard entry into the target directory of the current selection
+     * (or the session root if nothing is selected).
+     * No-op if the clipboard is empty or the destination is read-only.
+     */
+    void pasteSelected();
+
+    /**
+     * Returns {@code true} if there is a pending clipboard entry (copy or cut).
+     */
+    boolean hasClipboard();
+
+    /**
      * Closes and removes the mount session with the given ID.
      * No-op if the ID is not found.
      *

@@ -42,6 +42,11 @@ public final class ArchiveController implements IArchiveController, INfsControll
     private final NfsFileOperations nfsFileOps;
     private Component parentComponent;
 
+    /** Pending clipboard entry — null when empty. */
+    private ClipboardEntry clipboard;
+
+    private record ClipboardEntry(FileNode node, boolean cut) {}
+
     public ArchiveController(ArchiveModel model) {
         this.model = model;
         this.fileOps = new FileOperations(model);
@@ -358,6 +363,94 @@ public final class ArchiveController implements IArchiveController, INfsControll
     @Override
     public void saveFileContent(Path path, String content) {
         getFileOps().saveFile(path, content);
+    }
+
+    // ── Clipboard operations ───────────────────────────────────────────
+
+    @Override
+    public void copySelected() {
+        FileNode sel = model.getSelectedFile();
+        if (sel != null) clipboard = new ClipboardEntry(sel, false);
+    }
+
+    @Override
+    public void cutSelected() {
+        FileNode sel = model.getSelectedFile();
+        if (sel != null) clipboard = new ClipboardEntry(sel, true);
+    }
+
+    @Override
+    public boolean hasClipboard() {
+        return clipboard != null;
+    }
+
+    @Override
+    public void pasteSelected() {
+        if (clipboard == null || !model.isOpen() || model.isReadOnly()) return;
+        Path targetDir = resolveTargetDirectory();
+        if (targetDir == null) return;
+
+        final ClipboardEntry entry = clipboard;
+        if (entry.cut()) clipboard = null; // consume cut immediately
+
+        executeInBackground("Pasting...", () -> {
+            try {
+                doPaste(entry, targetDir);
+                model.fireTreeRefresh();
+            } catch (IOException ex) {
+                showError("Paste", ex);
+            }
+        });
+    }
+
+    private void doPaste(ClipboardEntry entry, Path targetDir) throws IOException {
+        FileNode src = entry.node();
+        String name = src.getPath().getFileName() != null
+                ? src.getPath().getFileName().toString()
+                : src.getDisplayName();
+        Path dest = targetDir.resolve(name);
+
+        boolean sameFs = src.getPath().getFileSystem() == dest.getFileSystem();
+
+        if (src.isDirectory()) {
+            copyDirectoryRecursive(src.getPath(), dest, sameFs, entry.cut());
+        } else {
+            copySingleFile(src.getPath(), dest, sameFs, entry.cut());
+        }
+    }
+
+    private void copySingleFile(Path src, Path dest, boolean sameFs, boolean deleteSource)
+            throws IOException {
+        if (sameFs) {
+            if (deleteSource) {
+                java.nio.file.Files.move(src, dest,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                java.nio.file.Files.copy(src, dest,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } else {
+            // Cross-filesystem: read bytes from source, write to destination
+            byte[] data = model.readFileBytes(src);
+            java.nio.file.Files.write(dest, data,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            if (deleteSource) java.nio.file.Files.deleteIfExists(src);
+        }
+    }
+
+    private void copyDirectoryRecursive(Path srcDir, Path destDir, boolean sameFs, boolean deleteSource)
+            throws IOException {
+        java.nio.file.Files.createDirectories(destDir);
+        for (io.wfs.ui.model.FileNode child : model.listChildren(srcDir)) {
+            Path childDest = destDir.resolve(child.getPath().getFileName().toString());
+            if (child.isDirectory()) {
+                copyDirectoryRecursive(child.getPath(), childDest, sameFs, deleteSource);
+            } else {
+                copySingleFile(child.getPath(), childDest, sameFs, deleteSource);
+            }
+        }
+        if (deleteSource && sameFs) java.nio.file.Files.deleteIfExists(srcDir);
     }
 
     // ── NFS operations (INfsController implementation) ───────────────────
