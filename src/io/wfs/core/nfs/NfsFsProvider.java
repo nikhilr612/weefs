@@ -343,8 +343,8 @@ public class NfsFsProvider extends FileSystemProvider {
     @Override
     public void copy(Path source, Path target, CopyOption... options) throws IOException {
         NfsPath nfsSource = castPath(source);
-        nfsSource.getFileSystem().ensureWritable();
         NfsPath nfsTarget = castPath(target);
+        nfsTarget.getFileSystem().ensureWritable();
         NfsIO.copy(nfsSource.getFileSystem().getConfig(), nfsSource.toString(), nfsTarget.toString());
     }
 
