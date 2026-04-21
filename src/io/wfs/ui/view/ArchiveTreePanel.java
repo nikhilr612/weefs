@@ -37,7 +37,7 @@ public final class ArchiveTreePanel extends JPanel {
         setLayout(new BorderLayout());
 
         JLabel sectionHeader = new JLabel("Archive Contents");
-        sectionHeader.setFont(sectionHeader.getFont().deriveFont(Font.BOLD, 12f));
+        sectionHeader.setFont(sectionHeader.getFont().deriveFont(Font.BOLD));
         sectionHeader.setBorder(BorderFactory.createEmptyBorder(7, 10, 7, 10));
 
         rootNode = new DefaultMutableTreeNode("(No archive open)");
@@ -101,7 +101,6 @@ public final class ArchiveTreePanel extends JPanel {
         });
 
         JScrollPane scrollPane = new JScrollPane(tree);
-        scrollPane.setPreferredSize(new Dimension(280, 400));
         add(sectionHeader, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
