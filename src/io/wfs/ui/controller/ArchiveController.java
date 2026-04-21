@@ -361,6 +361,23 @@ public final class ArchiveController implements IArchiveController, INfsControll
     }
 
     @Override
+    public void saveAs() {
+        FileNode selected = model.getSelectedFile();
+        if (selected == null || selected.isDirectory())
+            return;
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Save As...");
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setSelectedFile(new java.io.File(selected.getDisplayName()));
+
+        if (chooser.showSaveDialog(parentComponent) == JFileChooser.APPROVE_OPTION) {
+            java.nio.file.Path destination = chooser.getSelectedFile().toPath();
+            getFileOps().extractTo(selected.getPath(), destination);
+        }
+    }
+
+    @Override
     public void saveFileContent(Path path, String content) {
         getFileOps().saveFile(path, content);
     }
