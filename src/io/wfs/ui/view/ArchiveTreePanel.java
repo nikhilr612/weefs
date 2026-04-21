@@ -75,7 +75,10 @@ public final class ArchiveTreePanel extends JPanel {
                     g2.setFont(getFont());
                     FontMetrics fm = g2.getFontMetrics();
                     String txt = "\u2715"; // ✕
-                    int tx = getWidth() - fm.stringWidth(txt) - 6;
+                    // Anchor to the visible viewport edge so the button stays
+                    // fixed relative to the scrollbar regardless of panel width.
+                    Rectangle vis = getVisibleRect();
+                    int tx = vis.x + vis.width - fm.stringWidth(txt) - 8;
                     int ty = rb.y + (rb.height + fm.getAscent() - fm.getDescent()) / 2;
                     g2.setColor(Color.GRAY);
                     g2.drawString(txt, tx, ty);
@@ -285,18 +288,20 @@ public final class ArchiveTreePanel extends JPanel {
         // Use getClosestRowForLocation + explicit y-bounds check so that clicks in the
         // empty area to the right of the cell text (outside getRowForLocation's hit box)
         // are still detected.
-        if (!e.isPopupTrigger() && e.getButton() == MouseEvent.BUTTON1
-                && e.getX() >= tree.getWidth() - CLOSE_BTN_WIDTH) {
-            int row = tree.getClosestRowForLocation(e.getX(), e.getY());
-            if (row >= 0) {
-                Rectangle rb = tree.getRowBounds(row);
-                if (rb != null && e.getY() >= rb.y && e.getY() < rb.y + rb.height) {
-                    TreePath path = tree.getPathForRow(row);
-                    if (path != null) {
-                        DefaultMutableTreeNode node =
-                                (DefaultMutableTreeNode) path.getLastPathComponent();
-                        if (node.getUserObject() instanceof SessionNodeData sd) {
-                            confirmAndClose(sd.sessionId());
+        if (!e.isPopupTrigger() && e.getButton() == MouseEvent.BUTTON1) {
+            Rectangle vis = tree.getVisibleRect();
+            if (e.getX() >= vis.x + vis.width - CLOSE_BTN_WIDTH) {
+                int row = tree.getClosestRowForLocation(e.getX(), e.getY());
+                if (row >= 0) {
+                    Rectangle rb = tree.getRowBounds(row);
+                    if (rb != null && e.getY() >= rb.y && e.getY() < rb.y + rb.height) {
+                        TreePath path = tree.getPathForRow(row);
+                        if (path != null) {
+                            DefaultMutableTreeNode node =
+                                    (DefaultMutableTreeNode) path.getLastPathComponent();
+                            if (node.getUserObject() instanceof SessionNodeData sd) {
+                                confirmAndClose(sd.sessionId());
+                            }
                         }
                     }
                 }
