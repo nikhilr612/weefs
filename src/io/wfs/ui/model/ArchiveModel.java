@@ -41,6 +41,7 @@ public final class ArchiveModel {
     private final RemoteMountManager remoteMountManager = new RemoteMountManager();
 
     private Path archivePath;
+    private Path directoryRoot;
     private FileSystem fileSystem;
     private boolean remoteMounted;
     private boolean readOnly;
@@ -65,6 +66,16 @@ public final class ArchiveModel {
 
     public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         pcs.addPropertyChangeListener(propertyName, listener);
+    }
+
+    /**
+     * Mounts a local directory as a browsable file system.
+     * The directory itself becomes the root shown in the tree.
+     */
+    public void openDirectory(Path dir, boolean readOnly) throws IOException {
+        openMountUri(dir.toUri(), readOnly, dir);
+        // directoryRoot must be set after openMountUri (which calls closeArchive inside)
+        this.directoryRoot = dir;
     }
 
     /**
@@ -141,6 +152,7 @@ public final class ArchiveModel {
         fileSystem = null;
         remoteMountManager.setNfsConfig(null);
         remoteMounted = false;
+        directoryRoot = null;
         Path oldPath = archivePath;
         archivePath = null;
         selectedFile = null;
@@ -209,9 +221,13 @@ public final class ArchiveModel {
     }
 
     /**
-     * Returns the root path inside the mounted archive.
+     * Returns the root path inside the mounted file system.
+     * For local directories this is the directory itself; for archives it is "/".
      */
     public Path getRootPath() {
+        if (directoryRoot != null) {
+            return directoryRoot;
+        }
         if (isNfsMounted()) {
             return Path.of("/");
         }

@@ -55,6 +55,12 @@ public interface IArchiveController {
     // ── Archive lifecycle ─────────────────────────────────────────────
 
     /**
+     * Prompts the user to choose a local directory and mounts it
+     * as a browsable (read-write or read-only) file system.
+     */
+    void openDirectory();
+
+    /**
      * Prompts the user to choose an archive file and an access mode
      * (read-write / read-only), then mounts it via the model.
      */

@@ -65,6 +65,44 @@ public final class ArchiveController implements IArchiveController, INfsControll
     // ── Archive-level actions ──────────────────────────────────────────
 
     @Override
+    public void openDirectory() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Open Directory");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(false);
+
+        if (chooser.showOpenDialog(parentComponent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path selected = chooser.getSelectedFile().toPath().toAbsolutePath().normalize();
+
+        int mode = JOptionPane.showOptionDialog(parentComponent,
+                "Open directory in which mode?",
+                "Open Mode",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new String[] { "Read/Write", "Read Only" },
+                "Read/Write");
+
+        if (mode == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+
+        boolean readOnly = (mode == 1);
+
+        executeInBackground("Opening directory...", () -> {
+            try {
+                clearNfsIfMounted();
+                model.openDirectory(selected, readOnly);
+            } catch (IOException ex) {
+                showError("Open Directory", ex);
+            }
+        });
+    }
+
+    @Override
     public void openArchive() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Open Archive");

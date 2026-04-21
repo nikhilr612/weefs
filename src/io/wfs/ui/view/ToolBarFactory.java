@@ -31,6 +31,9 @@ public final class ToolBarFactory {
         JButton openBtn = makeButton("Open", IconFactory.archiveIcon(), "Open an archive (Ctrl+O)");
         openBtn.addActionListener(e -> controller.openArchive());
 
+        JButton openDirBtn = makeButton("Open Directory", IconFactory.folderIcon(), "Open a local directory");
+        openDirBtn.addActionListener(e -> controller.openDirectory());
+
         JButton newArchiveBtn = makeButton("New", IconFactory.archiveIcon(), "Create a new archive (Ctrl+Shift+N)");
         newArchiveBtn.addActionListener(e -> controller.createArchive());
 
@@ -39,6 +42,7 @@ public final class ToolBarFactory {
         closeBtn.setEnabled(false);
 
         toolBar.add(openBtn);
+        toolBar.add(openDirBtn);
         toolBar.add(newArchiveBtn);
         toolBar.add(closeBtn);
         toolBar.addSeparator();
