@@ -51,6 +51,25 @@ public final class MountSession {
     public boolean isReadOnly()       { return readOnly; }
     public boolean isNfsMounted()     { return nfsConfig != null; }
     public boolean isRemoteMounted()  { return remoteMounted; }
+
+    /**
+     * The human-readable path used to re-open this session (e.g. the archive file path).
+     * Returns {@code null} for NFS-only or remote sessions.
+     */
+    public Path getDisplayPath()      { return displayPath; }
+
+    /**
+     * Returns {@code true} if this session represents a writable archive whose
+     * in-memory state must be explicitly flushed (close + reopen) to persist.
+     * Local directories and NFS/remote mounts write through directly and do not need saving.
+     */
+    public boolean isSaveable() {
+        return !readOnly
+                && !isNfsMounted()
+                && directoryRoot == null          // not a plain local directory
+                && fileSystem != null
+                && fileSystem != FileSystems.getDefault();
+    }
     public NfsConnectionConfig getNfsConfig() { return nfsConfig; }
 
     /** Returns the browse-root for this session (archive root, directory, or NFS "/"). */

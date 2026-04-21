@@ -78,6 +78,14 @@ public final class ArchiveModel {
         return activeSession;
     }
 
+    /** Returns the session with the given ID, or {@code null} if not found. */
+    public MountSession getSession(String id) {
+        for (MountSession s : sessions) {
+            if (s.getId().equals(id)) return s;
+        }
+        return null;
+    }
+
     /**
      * Switches the active session without closing it.
      * Fires {@link #PROP_ARCHIVE_PATH}, {@link #PROP_READ_ONLY}, and

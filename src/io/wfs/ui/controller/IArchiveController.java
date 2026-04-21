@@ -111,6 +111,15 @@ public interface IArchiveController {
     void closeSession(String sessionId);
 
     /**
+     * Saves (flushes) the archive session with the given ID by closing its
+     * underlying filesystem (which writes the archive to disk) and reopening it.
+     * No-op for directory mounts, NFS sessions, read-only sessions, or unknown IDs.
+     *
+     * @param sessionId the UUID of the session to save
+     */
+    void saveSession(String sessionId);
+
+    /**
      * Flushes and unmounts the currently active archive session.
      * No-op if no archive is mounted.
      */

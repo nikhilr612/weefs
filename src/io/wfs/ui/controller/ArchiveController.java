@@ -272,6 +272,23 @@ public final class ArchiveController implements IArchiveController, INfsControll
         });
     }
 
+    @Override
+    public void saveSession(String sessionId) {
+        MountSession session = model.getSession(sessionId);
+        if (session == null || !session.isSaveable()) return;
+        Path archivePath = session.getDisplayPath();
+        executeInBackground("Saving...", () -> {
+            try {
+                model.closeSession(sessionId);
+                if (archivePath != null) {
+                    model.openArchive(archivePath, false);
+                }
+            } catch (IOException ex) {
+                showError("Save", ex);
+            }
+        });
+    }
+
     // ── File-level actions (prompting UI) ──────────────────────────────
 
     @Override

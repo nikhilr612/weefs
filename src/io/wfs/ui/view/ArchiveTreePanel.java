@@ -274,9 +274,19 @@ public final class ArchiveTreePanel extends JPanel {
 
         if (isSessionNode) {
             SessionNodeData sd = (SessionNodeData) node.getUserObject();
+
             JMenuItem unmount = new JMenuItem("Unmount");
             unmount.addActionListener(ev -> controller.closeSession(sd.sessionId()));
             menu.add(unmount);
+
+            // Show "Save" only for writable archive sessions (zip/tar etc.)
+            MountSession session = model.getSession(sd.sessionId());
+            if (session != null && session.isSaveable()) {
+                JMenuItem save = new JMenuItem("Save");
+                save.addActionListener(ev -> controller.saveSession(sd.sessionId()));
+                menu.add(save);
+            }
+
             menu.addSeparator();
         }
 
