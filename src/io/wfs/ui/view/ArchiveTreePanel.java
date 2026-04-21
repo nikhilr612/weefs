@@ -10,7 +10,6 @@ import io.wfs.ui.util.SwingUtils;
 import io.wfs.ui.view.dialog.PropertiesDialog;
 
 import javax.swing.*;
-import javax.swing.plaf.LayerUI;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -24,7 +23,8 @@ import java.util.Map;
 /**
  * Left-side panel showing all mounted sessions as top-level tree roots.
  * Each mount (archive, directory, NFS share) gets its own collapsible root node.
- * Session nodes show a hover-close (✕) overlay button and a right-click "Unmount" item.
+ * Session nodes show a hover-close (✕) button painted directly in paintComponent
+ * and expose "Unmount" / "Save" via right-click.
  */
 public final class ArchiveTreePanel extends JPanel {
 
@@ -39,11 +39,8 @@ public final class ArchiveTreePanel extends JPanel {
     /** Maps session ID -> the session's top-level tree node. */
     private final Map<String, DefaultMutableTreeNode> sessionNodes = new HashMap<>();
 
-    /** Row currently under the mouse (-1 = none). Used by the close-button overlay. */
+    /** Row currently under the mouse (-1 = none). Drives the hover-close button. */
     private int hoveredRow = -1;
-
-    /** JLayer that paints the x close button as an overlay on the tree. */
-    private JLayer<JTree> treeOverlay;
 
     public ArchiveTreePanel(ArchiveModel model, IArchiveController controller) {
         this.model = model;
@@ -57,7 +54,37 @@ public final class ArchiveTreePanel extends JPanel {
 
         hiddenRoot = new DefaultMutableTreeNode("__root__");
         treeModel = new DefaultTreeModel(hiddenRoot);
-        tree = new JTree(treeModel);
+
+        // Anonymous subclass so we can paint the hover-close button in the same
+        // Graphics pass as the rows — avoids any clipping/layering issues.
+        tree = new JTree(treeModel) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (hoveredRow < 0) return;
+                TreePath p = getPathForRow(hoveredRow);
+                if (p == null) return;
+                DefaultMutableTreeNode nd = (DefaultMutableTreeNode) p.getLastPathComponent();
+                if (!(nd.getUserObject() instanceof SessionNodeData)) return;
+                Rectangle rb = getRowBounds(hoveredRow);
+                if (rb == null) return;
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                            RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g2.setFont(getFont());
+                    FontMetrics fm = g2.getFontMetrics();
+                    String txt = "\u2715"; // ✕
+                    int tx = getWidth() - fm.stringWidth(txt) - 6;
+                    int ty = rb.y + (rb.height + fm.getAscent() - fm.getDescent()) / 2;
+                    g2.setColor(Color.GRAY);
+                    g2.drawString(txt, tx, ty);
+                } finally {
+                    g2.dispose();
+                }
+            }
+        };
+
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
@@ -91,14 +118,14 @@ public final class ArchiveTreePanel extends JPanel {
             }
         });
 
-        // Mouse: hover tracking, close-button click, double-click, popup
+        // Track hovered row to show/hide the close button
         tree.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
                 int row = tree.getRowForLocation(e.getX(), e.getY());
                 if (row != hoveredRow) {
                     hoveredRow = row;
-                    if (treeOverlay != null) treeOverlay.repaint();
+                    tree.repaint();
                 }
             }
         });
@@ -107,7 +134,7 @@ public final class ArchiveTreePanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 hoveredRow = -1;
-                if (treeOverlay != null) treeOverlay.repaint();
+                tree.repaint();
             }
 
             @Override
@@ -135,10 +162,7 @@ public final class ArchiveTreePanel extends JPanel {
             }
         });
 
-        // JLayer paints the close button as an overlay — never affects row preferred sizes
-        treeOverlay = new JLayer<>(tree, new CloseButtonOverlay());
-
-        JScrollPane scrollPane = new JScrollPane(treeOverlay);
+        JScrollPane scrollPane = new JScrollPane(tree);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
         add(sectionHeader, BorderLayout.NORTH);
@@ -184,9 +208,7 @@ public final class ArchiveTreePanel extends JPanel {
 
     private void removeSessionNode(String sessionId) {
         DefaultMutableTreeNode node = sessionNodes.remove(sessionId);
-        if (node != null) {
-            treeModel.removeNodeFromParent(node);
-        }
+        if (node != null) treeModel.removeNodeFromParent(node);
     }
 
     private void clearAllNodes() {
@@ -248,16 +270,24 @@ public final class ArchiveTreePanel extends JPanel {
             showContextMenu(e);
             return;
         }
-        // Close button: left-click in the rightmost CLOSE_BTN_WIDTH px of the tree row
-        if (!e.isPopupTrigger() && e.getButton() == MouseEvent.BUTTON1) {
-            int row = tree.getRowForLocation(e.getX(), e.getY());
-            if (row >= 0 && e.getX() >= tree.getWidth() - CLOSE_BTN_WIDTH) {
-                TreePath path = tree.getPathForRow(row);
-                if (path != null) {
-                    DefaultMutableTreeNode node =
-                            (DefaultMutableTreeNode) path.getLastPathComponent();
-                    if (node.getUserObject() instanceof SessionNodeData sd) {
-                        controller.closeSession(sd.sessionId());
+
+        // Close-button: left-click in rightmost CLOSE_BTN_WIDTH px of ANY session row.
+        // Use getClosestRowForLocation + explicit y-bounds check so that clicks in the
+        // empty area to the right of the cell text (outside getRowForLocation's hit box)
+        // are still detected.
+        if (!e.isPopupTrigger() && e.getButton() == MouseEvent.BUTTON1
+                && e.getX() >= tree.getWidth() - CLOSE_BTN_WIDTH) {
+            int row = tree.getClosestRowForLocation(e.getX(), e.getY());
+            if (row >= 0) {
+                Rectangle rb = tree.getRowBounds(row);
+                if (rb != null && e.getY() >= rb.y && e.getY() < rb.y + rb.height) {
+                    TreePath path = tree.getPathForRow(row);
+                    if (path != null) {
+                        DefaultMutableTreeNode node =
+                                (DefaultMutableTreeNode) path.getLastPathComponent();
+                        if (node.getUserObject() instanceof SessionNodeData sd) {
+                            controller.closeSession(sd.sessionId());
+                        }
                     }
                 }
             }
@@ -279,14 +309,12 @@ public final class ArchiveTreePanel extends JPanel {
             unmount.addActionListener(ev -> controller.closeSession(sd.sessionId()));
             menu.add(unmount);
 
-            // Show "Save" only for writable archive sessions (zip/tar etc.)
             MountSession session = model.getSession(sd.sessionId());
             if (session != null && session.isSaveable()) {
                 JMenuItem save = new JMenuItem("Save");
                 save.addActionListener(ev -> controller.saveSession(sd.sessionId()));
                 menu.add(save);
             }
-
             menu.addSeparator();
         }
 
@@ -347,6 +375,20 @@ public final class ArchiveTreePanel extends JPanel {
         menu.addSeparator();
         menu.add(properties);
 
+        // For non-session nodes, append an "Unmount" option so users can unmount
+        // the containing session from anywhere in the tree (not just the root node).
+        if (!isSessionNode && node != null) {
+            String sessId = findSessionId(node);
+            if (sessId != null) {
+                MountSession sess = model.getSession(sessId);
+                String label = sess != null ? "Unmount '" + sess.getLabel() + "'" : "Unmount";
+                menu.addSeparator();
+                JMenuItem unmount = new JMenuItem(label);
+                unmount.addActionListener(ev -> controller.closeSession(sessId));
+                menu.add(unmount);
+            }
+        }
+
         menu.show(tree, e.getX(), e.getY());
     }
 
@@ -387,43 +429,11 @@ public final class ArchiveTreePanel extends JPanel {
     private record SessionNodeData(String sessionId, String label) {}
 
     /**
-     * Paints the hover-close button as a JLayer overlay on the tree.
-     * Using an overlay avoids stretching row preferred sizes (which caused the
-     * close button to render off-screen when the renderer panel was made full-width).
-     */
-    private final class CloseButtonOverlay extends LayerUI<JTree> {
-        @Override
-        public void paint(Graphics g, JComponent c) {
-            super.paint(g, c);
-
-            if (hoveredRow < 0) return;
-            TreePath path = tree.getPathForRow(hoveredRow);
-            if (path == null) return;
-            DefaultMutableTreeNode nd =
-                    (DefaultMutableTreeNode) path.getLastPathComponent();
-            if (!(nd.getUserObject() instanceof SessionNodeData)) return;
-
-            Rectangle rb = tree.getRowBounds(hoveredRow);
-            if (rb == null) return;
-
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                    RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g2.setFont(tree.getFont());
-            FontMetrics fm = g2.getFontMetrics();
-            String txt = "\u2715"; // ✕
-            int tx = c.getWidth() - fm.stringWidth(txt) - 6;
-            int ty = rb.y + (rb.height + fm.getAscent() - fm.getDescent()) / 2;
-            g2.setColor(Color.GRAY);
-            g2.drawString(txt, tx, ty);
-            g2.dispose();
-        }
-    }
-
-    /**
      * Cell renderer that:
      * - Shows session nodes with a bold label and archive icon
      * - Delegates file nodes to {@link FileTreeCellRenderer}
+     * The hover-close button is NOT drawn here; it is drawn in paintComponent
+     * of the tree itself to avoid row-sizing and clipping complications.
      */
     private final class SessionAwareRenderer extends DefaultTreeCellRenderer {
 
