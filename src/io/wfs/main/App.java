@@ -12,7 +12,7 @@ public class App {
             switch (command) {
                 case "integration":
                     ArchiveIntegrationTest.run();
-                    NFSIntegrationTest.runIfConfigured();
+                    NfsIntegrationTest.run();
                     break;
                 case "nfs-integration":
                     NfsIntegrationTest.run();
@@ -34,7 +34,6 @@ public class App {
                     UtilTest.run();
                     ArchiveIntegrationTest.run();
                     NfsIntegrationTest.run();
-                    NFSIntegrationTest.runIfConfigured();
                     break;
                 case "gui":
                     io.wfs.ui.WeeFsApp.start();

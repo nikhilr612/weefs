@@ -59,7 +59,10 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public IFileOperations getFileOps() {
-        return isNfsMounted() ? nfsFileOps : fileOps;
+        // URI-mounted remotes (weefs://) expose a normal FileSystem via the model,
+        // so file mutations must go through FileOperations. Legacy NfsFileOperations
+        // is only valid when an explicit NfsConnectionConfig is mounted.
+        return model.isNfsMounted() ? nfsFileOps : fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
