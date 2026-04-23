@@ -71,7 +71,7 @@ public final class ArchiveModel {
 
     /** Returns an unmodifiable snapshot of all current mount sessions. */
     public List<MountSession> getSessions() {
-        return Collections.unmodifiableList(sessions);
+        return List.copyOf(sessions);
     }
 
     public MountSession getActiveSession() {
@@ -262,6 +262,8 @@ public final class ArchiveModel {
         sessions.add(session);
         MountSession prev = activeSession;
         activeSession = session;
+        final boolean prevRemote = prev != null && prev.remoteMounted;
+        final NfsConnectionConfig prevNfs = prev != null ? prev.nfsConfig : null;
 
         fireOnEdt(() -> {
             pcs.firePropertyChange(PROP_SESSION_ADDED, null, session);
@@ -274,8 +276,11 @@ public final class ArchiveModel {
             pcs.firePropertyChange(PROP_READ_ONLY,
                     prev != null && prev.readOnly, session.readOnly);
             pcs.firePropertyChange(PROP_SELECTED_FILE, null, null);
-            if (session.remoteMounted) {
-                pcs.firePropertyChange(PROP_REMOTE_MOUNTED, false, true);
+            if (prevRemote != session.remoteMounted) {
+                pcs.firePropertyChange(PROP_REMOTE_MOUNTED, prevRemote, session.remoteMounted);
+            }
+            if (prevNfs != session.nfsConfig) {
+                pcs.firePropertyChange(PROP_NFS_CONFIG, prevNfs, session.nfsConfig);
             }
         });
     }

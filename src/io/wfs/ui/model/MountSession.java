@@ -54,7 +54,8 @@ public final class MountSession {
 
     /**
      * The human-readable path used to re-open this session (e.g. the archive file path).
-     * Returns {@code null} for NFS-only or remote sessions.
+     * Returns {@code null} for NFS-only sessions. Remote (weefs://) sessions have a
+     * non-null display path representing the URI used to open them.
      */
     public Path getDisplayPath()      { return displayPath; }
 
@@ -66,6 +67,7 @@ public final class MountSession {
     public boolean isSaveable() {
         return !readOnly
                 && !isNfsMounted()
+                && !remoteMounted                 // remote weefs:// mounts are write-through
                 && directoryRoot == null          // not a plain local directory
                 && fileSystem != null
                 && fileSystem != FileSystems.getDefault();

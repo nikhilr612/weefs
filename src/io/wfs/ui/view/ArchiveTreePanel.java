@@ -419,12 +419,8 @@ public final class ArchiveTreePanel extends JPanel {
                     JOptionPane.YES_NO_CANCEL_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
             if (choice == JOptionPane.CANCEL_OPTION) return;
-            if (choice == JOptionPane.YES_OPTION) {
-                // saveSession runs async and internally closes+reopens the session,
-                // so we must not call closeSession afterwards — that would race.
-                controller.saveSession(sessionId);
-                return;
-            }
+            // YES and NO both unmount. Closing a writable archive session flushes
+            // the ZIP FileSystem to disk synchronously, so YES == NO == close.
         }
         controller.closeSession(sessionId);
     }

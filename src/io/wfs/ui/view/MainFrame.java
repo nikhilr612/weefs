@@ -79,8 +79,8 @@ public final class MainFrame extends JFrame {
     }
 
     private void handleExit() {
-        // Only prompt for sessions that actually need saving (writable archives).
-        // Directories and NFS mounts are write-through; no save needed.
+        // Only prompt for sessions that need explicit flushing (writable local archives).
+        // Directories, NFS, and remote mounts are write-through; closing them is enough.
         boolean hasSaveable = model.isOpen() &&
                 model.getSessions().stream().anyMatch(MountSession::isSaveable);
         if (hasSaveable) {
@@ -91,14 +91,9 @@ public final class MainFrame extends JFrame {
                     JOptionPane.QUESTION_MESSAGE);
 
             if (choice == JOptionPane.CANCEL_OPTION) return;
-            if (choice == JOptionPane.YES_OPTION) {
-                for (MountSession s : new java.util.ArrayList<>(model.getSessions())) {
-                    if (s.isSaveable()) {
-                        controller.saveSession(s.getId());
-                    }
-                }
-                // saveSession is async; for the exit path just fall through and close all
-            }
+            // YES and NO both fall through to closeArchive() below.
+            // closeSession() flushes the ZIP FileSystem to disk synchronously,
+            // so no async race — saveSession is not needed here.
         }
 
         try {

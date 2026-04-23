@@ -45,7 +45,7 @@ public final class ArchiveController implements IArchiveController, INfsControll
     /** Pending clipboard entry — null when empty. */
     private ClipboardEntry clipboard;
 
-    private record ClipboardEntry(FileNode node, boolean cut) {}
+    private record ClipboardEntry(FileNode node, boolean cut, String sourceSessionId) {}
 
     public ArchiveController(ArchiveModel model) {
         this.model = model;
@@ -389,13 +389,17 @@ public final class ArchiveController implements IArchiveController, INfsControll
     @Override
     public void copySelected() {
         FileNode sel = model.getSelectedFile();
-        if (sel != null) clipboard = new ClipboardEntry(sel, false);
+        MountSession active = model.getActiveSession();
+        if (sel != null) clipboard = new ClipboardEntry(sel, false,
+                active != null ? active.getId() : null);
     }
 
     @Override
     public void cutSelected() {
         FileNode sel = model.getSelectedFile();
-        if (sel != null) clipboard = new ClipboardEntry(sel, true);
+        MountSession active = model.getActiveSession();
+        if (sel != null) clipboard = new ClipboardEntry(sel, true,
+                active != null ? active.getId() : null);
     }
 
     @Override
@@ -432,14 +436,14 @@ public final class ArchiveController implements IArchiveController, INfsControll
         boolean sameFs = src.getPath().getFileSystem() == dest.getFileSystem();
 
         if (src.isDirectory()) {
-            copyDirectoryRecursive(src.getPath(), dest, sameFs, entry.cut());
+            copyDirectoryRecursive(src.getPath(), dest, sameFs, entry.cut(), entry.sourceSessionId());
         } else {
-            copySingleFile(src.getPath(), dest, sameFs, entry.cut());
+            copySingleFile(src.getPath(), dest, sameFs, entry.cut(), entry.sourceSessionId());
         }
     }
 
-    private void copySingleFile(Path src, Path dest, boolean sameFs, boolean deleteSource)
-            throws IOException {
+    private void copySingleFile(Path src, Path dest, boolean sameFs,
+            boolean deleteSource, String srcSessionId) throws IOException {
         if (sameFs) {
             if (deleteSource) {
                 java.nio.file.Files.move(src, dest,
@@ -449,8 +453,8 @@ public final class ArchiveController implements IArchiveController, INfsControll
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         } else {
-            // Cross-filesystem: read bytes from source, write to destination
-            byte[] data = model.readFileBytes(src);
+            // Cross-filesystem: read bytes from source using the correct session backend.
+            byte[] data = readBytesFromSession(srcSessionId, src);
             java.nio.file.Files.write(dest, data,
                     java.nio.file.StandardOpenOption.CREATE,
                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
@@ -458,15 +462,31 @@ public final class ArchiveController implements IArchiveController, INfsControll
         }
     }
 
-    private void copyDirectoryRecursive(Path srcDir, Path destDir, boolean sameFs, boolean deleteSource)
-            throws IOException {
+    /**
+     * Reads the bytes of {@code path} via the session identified by {@code sessionId}.
+     * Falls back to the model's generic read (which does FS-matching then activeSession)
+     * for non-NFS sessions — they don't need special routing since the Path already
+     * carries the correct FileSystem.
+     */
+    private byte[] readBytesFromSession(String sessionId, Path path) throws IOException {
+        if (sessionId != null) {
+            MountSession session = model.getSession(sessionId);
+            if (session != null && session.isNfsMounted() && session.getNfsConfig() != null) {
+                return io.wfs.core.nfs.NfsIO.readFile(session.getNfsConfig(), path.toString());
+            }
+        }
+        return model.readFileBytes(path);
+    }
+
+    private void copyDirectoryRecursive(Path srcDir, Path destDir, boolean sameFs,
+            boolean deleteSource, String srcSessionId) throws IOException {
         java.nio.file.Files.createDirectories(destDir);
         for (io.wfs.ui.model.FileNode child : model.listChildren(srcDir)) {
             Path childDest = destDir.resolve(child.getPath().getFileName().toString());
             if (child.isDirectory()) {
-                copyDirectoryRecursive(child.getPath(), childDest, sameFs, deleteSource);
+                copyDirectoryRecursive(child.getPath(), childDest, sameFs, deleteSource, srcSessionId);
             } else {
-                copySingleFile(child.getPath(), childDest, sameFs, deleteSource);
+                copySingleFile(child.getPath(), childDest, sameFs, deleteSource, srcSessionId);
             }
         }
         if (deleteSource && sameFs) java.nio.file.Files.deleteIfExists(srcDir);
