@@ -1,12 +1,17 @@
 @startuml
-title weefs — High-level Bad-Design (design-pattern / principle view)
+title weefs — High-level Bad Design (anti-patterns that were later fixed)
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
+skinparam packageStyle rectangle
 hide empty members
 
-package "UI (MVC violated)" {
-  class ArchiveModel <<BAD: God object>> {
+' =====================================================================
+' UI layer — MVC boundary violated, single-session, no clipboard
+' =====================================================================
+package "UI (MVC violated)" #FFEBEB {
+
+  class ArchiveModel <<BAD: God object>> <<single-session>> {
     -archive : FileSystem
     -archivePath : Path
     -selectedFile : FileNode
@@ -15,46 +20,67 @@ package "UI (MVC violated)" {
     -nfsConfig : NfsConnectionConfig
     --
     +openArchive(Path) : void
+    +closeArchive() : void
     +setNfsConfig(NfsConnectionConfig) : void
     +mountRemote(URI) : void
-    +closeArchive() : void
   }
   note right of ArchiveModel
-    Single class owns archive state,
-    NFS state and UI selection —
-    violates SRP.
+    One class owns archive state, NFS state,
+    UI-selection state, and lifecycle.
+    Violates SRP. Only one archive at a time —
+    no multi-mount support.
   end note
 
-  class ArchiveController <<BAD: duplicate state>> {
+  class ArchiveController <<BAD: duplicate state>> <<fat controller>> {
     -model : ArchiveModel
     -currentNfsConfig : NfsConnectionConfig
     --
     +extractSelected() : void
+    +createDirectory(String) : void
+    +deleteSelected() : void
+    +renameSelected(String) : void
     +getNfsFileOps() : NfsFileOperations
   }
   note right of ArchiveController
-    currentNfsConfig mirrors
-    model.getNfsConfig() — two
-    sources of truth.
+    currentNfsConfig mirrors model.getNfsConfig()
+    → two sources of truth.
+    Exposes concrete NfsFileOperations → DIP leak.
+    No IArchiveController / INfsController split.
   end note
 
   class NfsFileOperations <<BAD: concrete leak>>
-  interface INfsController
-  INfsController <|.. ArchiveController
-  ArchiveController --> NfsFileOperations : <<returns concrete>>
+  class FileOperations <<BAD: concrete leak>>
+  note bottom of FileOperations
+    No IFileOperations abstraction →
+    controller & views bind to concrete types.
+  end note
+
+  class MainFrame <<BAD: tight coupling>> {
+    -controller : ArchiveController
+  }
+  note bottom of MainFrame
+    View holds a concrete controller,
+    not an interface.
+  end note
+
 }
 
-package "Core (OCP / DIP violated)" {
-  class FileSystemFactory <<BAD: OCP violation>> {
+' =====================================================================
+' Filesystem SPI — no extension point, hardcoded drivers
+' =====================================================================
+package "Filesystem (OCP / DIP violated)" #FFEBEB {
+
+  class FileSystemFactory <<BAD: OCP violation>> <<hardcoded>> {
     -drivers : Map<String, FileSystemDriver>
     --
     -registerDefaults() : void
     +open(URI, Map) : FileSystem
   }
-  note bottom of FileSystemFactory
+  note top of FileSystemFactory
     registerDefaults() hard-codes
-    ZipFileSystemDriver / NfsFileSystemDriver —
-    new scheme requires modifying factory.
+    "zip" / "weefs" / "nfs" drivers.
+    Adding a scheme requires editing
+    the factory → OCP violation.
   end note
 
   interface FileSystemDriver
@@ -69,51 +95,98 @@ package "Core (OCP / DIP violated)" {
     +NfsFileSystemDriver()
   }
   note bottom of NfsFileSystemDriver
-    Driver directly "new"s its
-    provider — no injection,
-    untestable.
+    Driver calls `new NfsSftpFsProvider()`
+    internally → no injection, untestable,
+    impossible to swap.
   end note
 
   FileSystemDriver <|.. ZipFileSystemDriver
   FileSystemDriver <|.. NfsFileSystemDriver
-  FileSystemFactory --> FileSystemDriver
+  FileSystemFactory o--> FileSystemDriver
 }
 
-package "NFS (no pooling)" {
-  class NfsSftpFsIO <<BAD: no pooling>> {
-    -sessions : JSch
-    --
-    +withChannel(work) : T
-  }
-  note bottom of NfsSftpFsIO
-    Opens a new SSH session
-    per operation — expensive,
-    no connection reuse.
-  end note
-}
+' =====================================================================
+' Archive extraction — monolithic, if/else over format
+' =====================================================================
+package "Extractor (no Strategy)" #FFEBEB {
 
-package "Extractor (no strategy)" {
-  class Extractor <<BAD: monolithic>> {
+  class Extractor <<BAD: monolithic>> <<big-switch>> {
     --
-    +extractZip(...) : void
-    +extractTar(...) : void
-    +extractGz(...) : void
+    +extractZip(Path, Path) : void
+    +extractTar(Path, Path) : void
+    +extractGz(Path, Path) : void
+    +writeZip(Path, Path) : void
+    +writeTar(Path, Path) : void
+    +detectFormat(Path) : String
   }
   note bottom of Extractor
-    One class handles every
-    archive format with a
-    big if/else — violates
-    OCP & Strategy.
+    One class does every archive format.
+    Adding a format means editing Extractor
+    and its callers → OCP + Strategy missing.
   end note
 }
 
-ArchiveModel --> FileSystemFactory
-ArchiveController --> ArchiveModel
-ArchiveModel --> NfsSftpFsIO
+' =====================================================================
+' Compression — no strategy abstraction, ad-hoc gzip path
+' =====================================================================
+package "Compression (no abstraction)" #FFEBEB {
 
+  class AdHocGzipUsage <<BAD: no Strategy>> {
+    --
+    +wrapStream(InputStream, String) : InputStream
+  }
+  note bottom of AdHocGzipUsage
+    Compression selected inline with
+    if (isGzip) new GZIPInputStream(...)
+    scattered across call sites.
+  end note
+}
+
+' =====================================================================
+' NFS — transport not pooled
+' =====================================================================
+package "NFS (no pooling)" #FFEBEB {
+
+  class NfsSftpFsIO <<BAD: no pooling>> {
+    -jsch : JSch
+    --
+    +withChannel(SftpWork) : T
+  }
+  note bottom of NfsSftpFsIO
+    A fresh SSH session + SFTP channel
+    is opened per operation. Expensive;
+    no reuse, no timeout management.
+  end note
+}
+
+' =====================================================================
+' Cross-package wiring — shows concrete coupling
+' =====================================================================
+ArchiveModel --> FileSystemFactory
+ArchiveModel --> NfsSftpFsIO
+ArchiveController --> ArchiveModel
+ArchiveController --> NfsFileOperations
+ArchiveController --> FileOperations
+ArchiveController ..> Extractor
+MainFrame --> ArchiveController
+
+' =====================================================================
+' Legend
+' =====================================================================
 legend right
-  <<BAD: ...>> annotates concrete design issues
-  Numbers of arrows kept low to emphasize
-  structural anti-patterns, not every call.
+  == Anti-patterns captured in this view ==
+  • God object — ArchiveModel owns every UI / mount / NFS concern
+  • Single-session — only one archive can be open at a time
+  • Duplicate state — controller mirrors model's NFS config
+  • Concrete leak — controller returns NfsFileOperations, views hold ArchiveController
+  • No IFileOperations seam — DIP violated at file-ops layer
+  • Hardcoded factory — FileSystemFactory.registerDefaults() violates OCP
+  • New'd providers — drivers construct providers internally (DIP)
+  • Monolithic Extractor — one class, big switch over format
+  • No compression Strategy — gzip/xz wrapping scattered inline
+  • No SSH pooling — NfsSftpFsIO opens a session per operation
+  • No clipboard — UI has no copy/cut/paste abstraction
+  • Tight view→controller coupling — MainFrame binds to concrete ArchiveController
+  Each <<BAD: ...>> stereotype maps to a fix in the good-design view.
 endlegend
 @enduml
