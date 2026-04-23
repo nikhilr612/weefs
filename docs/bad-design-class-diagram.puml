@@ -39,8 +39,8 @@ package "io.wfs.core.filesystem" {
     interface FileSystemDriver <<BAD: DIP violation in impls>>
     class FileSystemFactory <<BAD: OCP — hardcodes 3 drivers>>
     class LocalFileSystemDriver implements FileSystemDriver
-    class NfsFileSystemDriver implements FileSystemDriver <<BAD: instantiates NfsSftpFsProvider directly>>
-    class ZipFileSystemDriver implements FileSystemDriver <<BAD: instantiates ExtZipFsProvider directly>>
+    class NfsFileSystemDriver <<BAD: instantiates NfsSftpFsProvider directly>> implements FileSystemDriver
+    class ZipFileSystemDriver <<BAD: instantiates ExtZipFsProvider directly>> implements FileSystemDriver
 }
 
 ' ══════════════════════════════════════════════════════
@@ -82,7 +82,7 @@ package "io.wfs.ui.controller" {
     interface IFileOperations
     class ArchiveController <<BAD: currentNfsConfig duplicates model state>>
     class FileOperations implements IFileOperations
-    class NfsFileOperations implements IFileOperations <<BAD: showError(null) parent>>
+    class NfsFileOperations <<BAD: showError(null) parent>> implements IFileOperations
 }
 
 ' ══════════════════════════════════════════════════════
