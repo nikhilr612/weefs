@@ -419,7 +419,12 @@ public final class ArchiveTreePanel extends JPanel {
                     JOptionPane.YES_NO_CANCEL_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
             if (choice == JOptionPane.CANCEL_OPTION) return;
-            if (choice == JOptionPane.YES_OPTION) controller.saveSession(sessionId);
+            if (choice == JOptionPane.YES_OPTION) {
+                // saveSession runs async and internally closes+reopens the session,
+                // so we must not call closeSession afterwards — that would race.
+                controller.saveSession(sessionId);
+                return;
+            }
         }
         controller.closeSession(sessionId);
     }

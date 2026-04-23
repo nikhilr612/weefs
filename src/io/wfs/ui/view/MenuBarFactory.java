@@ -234,6 +234,12 @@ public final class MenuBarFactory {
                     && !model.getSelectedFile().isDirectory());
         };
         model.addPropertyChangeListener(evt -> SwingUtilities.invokeLater(updateEditItems));
+        // Also refresh on menu open so clipboard state (copy/cut→paste) is current
+        menu.addMenuListener(new javax.swing.event.MenuListener() {
+            @Override public void menuSelected(javax.swing.event.MenuEvent e) { updateEditItems.run(); }
+            @Override public void menuDeselected(javax.swing.event.MenuEvent e) {}
+            @Override public void menuCanceled(javax.swing.event.MenuEvent e) {}
+        });
         updateEditItems.run();
 
         return menu;
@@ -250,8 +256,11 @@ public final class MenuBarFactory {
         menu.add(refresh);
         menu.addSeparator();
 
-        JCheckBoxMenuItem darkTheme = new JCheckBoxMenuItem("Dark Theme");
-        darkTheme.addActionListener(e -> SwingUtils.toggleTheme());
+        JCheckBoxMenuItem darkTheme = new JCheckBoxMenuItem("Dark Theme", SwingUtils.isDarkTheme());
+        darkTheme.addActionListener(e -> {
+            SwingUtils.toggleTheme();
+            darkTheme.setSelected(SwingUtils.isDarkTheme());
+        });
         menu.add(darkTheme);
 
         return menu;

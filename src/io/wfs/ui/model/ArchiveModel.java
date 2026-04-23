@@ -97,6 +97,8 @@ public final class ArchiveModel {
                 MountSession prev = activeSession;
                 activeSession = s;
                 selectedFile = null;
+                final boolean prevRemote = prev != null && prev.remoteMounted;
+                final NfsConnectionConfig prevNfs = prev != null ? prev.nfsConfig : null;
                 fireOnEdt(() -> {
                     pcs.firePropertyChange(PROP_SELECTED_FILE, null, null);
                     pcs.firePropertyChange(PROP_ARCHIVE_PATH,
@@ -104,6 +106,12 @@ public final class ArchiveModel {
                     if (prev == null || prev.readOnly != s.readOnly) {
                         pcs.firePropertyChange(PROP_READ_ONLY,
                                 prev != null && prev.readOnly, s.readOnly);
+                    }
+                    if (prevRemote != s.remoteMounted) {
+                        pcs.firePropertyChange(PROP_REMOTE_MOUNTED, prevRemote, s.remoteMounted);
+                    }
+                    if (prevNfs != s.nfsConfig) {
+                        pcs.firePropertyChange(PROP_NFS_CONFIG, prevNfs, s.nfsConfig);
                     }
                 });
                 return;
@@ -125,6 +133,8 @@ public final class ArchiveModel {
         boolean wasActive    = (activeSession == removed);
         boolean wasNfs       = removed.isNfsMounted();
         boolean wasRemote    = removed.remoteMounted;
+        // Capture config before close() nulls it
+        final NfsConnectionConfig oldNfsConfig = removed.nfsConfig;
         removed.close();
 
         if (wasActive) {
@@ -137,7 +147,7 @@ public final class ArchiveModel {
         fireOnEdt(() -> {
             pcs.firePropertyChange(PROP_SESSION_REMOVED, removed, id);
             if (wasNfs) {
-                pcs.firePropertyChange(PROP_NFS_CONFIG, removed.nfsConfig, null);
+                pcs.firePropertyChange(PROP_NFS_CONFIG, oldNfsConfig, null);
             }
             if (wasActive) {
                 if (nowEmpty) {
@@ -153,6 +163,13 @@ public final class ArchiveModel {
                             removed.displayPath, newActive.displayPath);
                     pcs.firePropertyChange(PROP_READ_ONLY,
                             removed.readOnly, newActive.readOnly);
+                    // Fire remote/NFS status if it changed when switching active session
+                    if (wasRemote != newActive.remoteMounted) {
+                        pcs.firePropertyChange(PROP_REMOTE_MOUNTED, wasRemote, newActive.remoteMounted);
+                    }
+                    if (oldNfsConfig != newActive.nfsConfig) {
+                        pcs.firePropertyChange(PROP_NFS_CONFIG, oldNfsConfig, newActive.nfsConfig);
+                    }
                 }
             }
         });
@@ -236,7 +253,7 @@ public final class ArchiveModel {
                 }
             }
             if (nfsId != null) closeSession(nfsId);
-            fireOnEdt(() -> pcs.firePropertyChange(PROP_NFS_CONFIG, null, null));
+            // closeSession already fires PROP_NFS_CONFIG (oldConfig→null); no extra fire needed.
         }
     }
 

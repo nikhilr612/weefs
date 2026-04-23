@@ -4,6 +4,7 @@ import io.wfs.ui.controller.ArchiveController;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.MountSession;
+import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
@@ -79,25 +80,25 @@ public final class MainFrame extends JFrame {
     }
 
     private void handleExit() {
-        boolean hasUnsaved = model.isOpen() &&
-                model.getSessions().stream().anyMatch(s -> !s.isReadOnly());
-        if (hasUnsaved) {
+        // Only prompt for sessions that actually need saving (writable archives).
+        // Directories and NFS mounts are write-through; no save needed.
+        boolean hasSaveable = model.isOpen() &&
+                model.getSessions().stream().anyMatch(MountSession::isSaveable);
+        if (hasSaveable) {
             int choice = JOptionPane.showConfirmDialog(this,
-                    "There are open writable mounts. Close them before exiting?",
+                    "Save changes to open archives before exiting?",
                     "Unsaved Changes",
                     JOptionPane.YES_NO_CANCEL_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
             if (choice == JOptionPane.CANCEL_OPTION) return;
             if (choice == JOptionPane.YES_OPTION) {
-                try {
-                    model.closeArchive();
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(this,
-                            "Error closing: " + ex.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
+                for (MountSession s : new java.util.ArrayList<>(model.getSessions())) {
+                    if (s.isSaveable()) {
+                        controller.saveSession(s.getId());
+                    }
                 }
+                // saveSession is async; for the exit path just fall through and close all
             }
         }
 

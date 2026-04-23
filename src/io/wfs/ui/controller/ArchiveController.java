@@ -65,9 +65,11 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public IFileOperations getFileOps() {
-        boolean nfs = isNfsMounted();
-        if (nfs) nfsFileOps.setConfig(model.getNfsConfig());
-        return nfs ? nfsFileOps : fileOps;
+        if (isNfsMounted() && model.getNfsConfig() != null) {
+            nfsFileOps.setConfig(model.getNfsConfig());
+            return nfsFileOps;
+        }
+        return fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
@@ -481,12 +483,18 @@ public final class ArchiveController implements IArchiveController, INfsControll
     public void unmountNfs() {
         executeInBackground("Unmounting...", () -> {
             try {
-                for (MountSession s : model.getSessions()) {
-                    if (s.isNfsMounted() || s.isRemoteMounted()) {
-                        if (s.isNfsMounted()) nfsFileOps.setConfig(null);
-                        model.closeSession(s.getId());
-                        break;
+                MountSession active = model.getActiveSession();
+                MountSession target = null;
+                if (active != null && (active.isNfsMounted() || active.isRemoteMounted())) {
+                    target = active;
+                } else {
+                    for (MountSession s : model.getSessions()) {
+                        if (s.isNfsMounted() || s.isRemoteMounted()) { target = s; break; }
                     }
+                }
+                if (target != null) {
+                    if (target.isNfsMounted()) nfsFileOps.setConfig(null);
+                    model.closeSession(target.getId());
                 }
             } catch (Exception ex) {
                 showError("Unmount", ex);
