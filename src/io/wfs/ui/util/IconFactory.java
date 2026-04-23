@@ -10,7 +10,7 @@ import java.awt.*;
  */
 public final class IconFactory {
 
-    private static final int ICON_SIZE = 16;
+    private static final int ICON_SIZE = 18;
 
     private IconFactory() {
     }

@@ -18,22 +18,21 @@ public final class StatusBarPanel extends JPanel {
     private final JLabel archiveLabel;
     private final JLabel fileInfoLabel;
     private final JLabel modeLabel;
+    private boolean currentReadOnly;
 
     public StatusBarPanel(ArchiveModel model) {
         setLayout(new BorderLayout());
+        Color sepColor = UIManager.getColor("Separator.foreground");
         setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
+                BorderFactory.createMatteBorder(1, 0, 0, 0, sepColor != null ? sepColor : Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(3, 8, 3, 8)));
 
         archiveLabel = new JLabel("No archive open");
-        archiveLabel.setFont(archiveLabel.getFont().deriveFont(Font.PLAIN, 11f));
 
         fileInfoLabel = new JLabel(" ");
-        fileInfoLabel.setFont(fileInfoLabel.getFont().deriveFont(Font.PLAIN, 11f));
         fileInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         modeLabel = new JLabel(" ");
-        modeLabel.setFont(modeLabel.getFont().deriveFont(Font.PLAIN, 11f));
         modeLabel.setHorizontalAlignment(SwingConstants.RIGHT);
 
         add(archiveLabel, BorderLayout.WEST);
@@ -41,6 +40,25 @@ public final class StatusBarPanel extends JPanel {
         add(modeLabel, BorderLayout.EAST);
 
         model.addPropertyChangeListener(this::onModelChange);
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (modeLabel != null) {
+            updateModeLabel(currentReadOnly);
+        }
+    }
+
+    /** Applies the mode text and a theme-aware foreground to {@code modeLabel}. */
+    private void updateModeLabel(boolean ro) {
+        currentReadOnly = ro;
+        modeLabel.setText(ro ? "READ ONLY" : "READ/WRITE");
+        Color roColor = UIManager.getColor("Component.error.focusedBorderColor");
+        Color rwColor = UIManager.getColor("Component.focusedBorderColor");
+        modeLabel.setForeground(ro
+                ? (roColor != null ? roColor : new Color(180, 60, 60))
+                : (rwColor != null ? rwColor : new Color(60, 130, 60)));
     }
 
     private void onModelChange(PropertyChangeEvent evt) {
@@ -56,8 +74,7 @@ public final class StatusBarPanel extends JPanel {
                 }
                 case ArchiveModel.PROP_READ_ONLY -> {
                     boolean ro = Boolean.TRUE.equals(evt.getNewValue());
-                    modeLabel.setText(ro ? "READ ONLY" : "READ/WRITE");
-                    modeLabel.setForeground(ro ? new Color(180, 60, 60) : new Color(60, 130, 60));
+                    updateModeLabel(ro);
                 }
                 case ArchiveModel.PROP_SELECTED_FILE -> {
                     Object sel = evt.getNewValue();

@@ -3,6 +3,7 @@ package io.wfs.ui.view;
 import io.wfs.ui.controller.ArchiveController;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
+import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
@@ -78,34 +79,26 @@ public final class MainFrame extends JFrame {
     }
 
     private void handleExit() {
-        if (model.isOpen() && !model.isReadOnly()) {
+        // Only prompt for sessions that need explicit flushing (writable local archives).
+        // Directories, NFS, and remote mounts are write-through; closing them is enough.
+        boolean hasSaveable = model.isOpen() &&
+                model.getSessions().stream().anyMatch(MountSession::isSaveable);
+        if (hasSaveable) {
             int choice = JOptionPane.showConfirmDialog(this,
-                    "Save changes to the archive before closing?",
+                    "Save changes to open archives before exiting?",
                     "Unsaved Changes",
                     JOptionPane.YES_NO_CANCEL_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
-            if (choice == JOptionPane.CANCEL_OPTION) {
-                return; // Don't exit
-            }
-            if (choice == JOptionPane.YES_OPTION) {
-                try {
-                    model.closeArchive(); // Close writes changes
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(this,
-                            "Error saving: " + ex.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-            }
+            if (choice == JOptionPane.CANCEL_OPTION) return;
+            // YES and NO both fall through to closeArchive() below.
+            // closeSession() flushes the ZIP FileSystem to disk synchronously,
+            // so no async race — saveSession is not needed here.
         }
 
         try {
-            if (model.isOpen()) {
-                model.closeArchive();
-            }
-        } catch (IOException ignored) {
-        }
+            if (model.isOpen()) model.closeArchive();
+        } catch (IOException ignored) {}
 
         dispose();
         System.exit(0);

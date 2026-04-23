@@ -31,16 +31,15 @@ public final class ToolBarFactory {
         JButton openBtn = makeButton("Open", IconFactory.archiveIcon(), "Open an archive (Ctrl+O)");
         openBtn.addActionListener(e -> controller.openArchive());
 
+        JButton openDirBtn = makeButton("Open Directory", IconFactory.folderIcon(), "Open a local directory");
+        openDirBtn.addActionListener(e -> controller.openDirectory());
+
         JButton newArchiveBtn = makeButton("New", IconFactory.archiveIcon(), "Create a new archive (Ctrl+Shift+N)");
         newArchiveBtn.addActionListener(e -> controller.createArchive());
 
-        JButton closeBtn = makeButton("Close", null, "Close the current archive");
-        closeBtn.addActionListener(e -> controller.closeArchive());
-        closeBtn.setEnabled(false);
-
         toolBar.add(openBtn);
+        toolBar.add(openDirBtn);
         toolBar.add(newArchiveBtn);
-        toolBar.add(closeBtn);
         toolBar.addSeparator();
 
         // NFS operations
@@ -100,8 +99,7 @@ public final class ToolBarFactory {
             boolean isDirectory = hasSel && selectedFile.isDirectory();
             boolean nfsMounted = nfsController != null && nfsController.isNfsMounted();
 
-            closeBtn.setEnabled(isOpen);
-            mountNfsBtn.setEnabled(nfsController != null && !nfsMounted);
+            mountNfsBtn.setEnabled(nfsController != null);
             unmountNfsBtn.setEnabled(nfsMounted);
             newFileBtn.setEnabled(canEdit);
             newDirBtn.setEnabled(canEdit);
@@ -120,8 +118,7 @@ public final class ToolBarFactory {
             btn.setIcon(icon);
         }
         btn.setToolTipText(tooltip);
-        btn.setFocusPainted(false);
-        btn.setMargin(new Insets(4, 8, 4, 8));
+        btn.putClientProperty("JButton.buttonType", "toolBarButton");
         return btn;
     }
 }
