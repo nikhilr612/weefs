@@ -3,11 +3,22 @@ title WeeFsApp — Bad-Design Class Diagram
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
+hide empty members
 
 ' ─────────────────────────────────────────────────────────────────────
 ' PACKAGE: io.wfs.core.extractor
 ' ─────────────────────────────────────────────────────────────────────
 package "io.wfs.core.extractor" {
+    interface IArchiveExtractor
+    class ArchiveExtractor implements IArchiveExtractor
+    class ExtZipFsProvider
+    class ExtZipFsIO
+    class ExtZipFileSystem
+    class ExtZipPath
+    class ExtZipDirectoryStream
+    class ArchiveFormatDetector
+    class ArchiveFormatInfo
+    enum ArchiveContainerType
 
   enum ArchiveContainerType {
     ZIP
@@ -222,6 +233,10 @@ package "io.wfs.core.filesystem" {
 ' PACKAGE: io.wfs.core.nfs
 ' ─────────────────────────────────────────────────────────────────────
 package "io.wfs.core.nfs" {
+    class NfsFsProvider
+    class NfsIO
+    class NfsConnectionConfig
+    class NfsFileInfo
 
   class NfsConnectionConfig {
     -host : String
