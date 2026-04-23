@@ -3,8 +3,8 @@ title File Operations (extract · copy · delete · paste · rename)
 
 start
 
-:User selects node(s) in the tree
-and triggers an operation;
+:Select node(s) in the tree UI
+and trigger an operation;
 
 :Controller dispatches the file operation
 to the active session;

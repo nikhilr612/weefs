@@ -1,5 +1,5 @@
 @startuml
-title Open Archive / Mount Remote — URI routing
+title Open Archive / Mount Remote via URI
 
 start
 
@@ -18,24 +18,24 @@ endif
 note right: drivers discovered via\njava.util.ServiceLoader
 
 if (scheme?) then (xzip)
-  :Extract archive to isolated temp directory;
-  :Return archive-backed virtual FileSystem;
+  :Extract archive to cache directory;
+  :Select archive-backed virtual FileSystem;
 else if (weefs) then (yes)
   if (auth env var set?) then (yes)
     :Verify remote root is reachable;
-    :Return remote-backed FileSystem;
+    :Select remote-backed FileSystem;
   else (no)
-    :Report error — auth env var not set;
+    :Report error; auth env var not set;
     stop
   endif
 else (file)
-  :Return default local FileSystem;
+  :Select default local FileSystem;
 endif
 
 :Wrap in new mount session
 (display path, read-only flag, remote flag);
 :Add session to model;
-:Notify views — tree adds new session root node;
+:Notify views, tree adds new session root node;
 
 stop
 @enduml
