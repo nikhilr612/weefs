@@ -63,6 +63,48 @@ package "UI (MVC violated)" #FFEBEB {
     not an interface.
   end note
 
+  ' --- supporting base classes (unchanged across transition) ---
+  class FileNode <<base: tree node>> {
+    -name : String
+    -path : Path
+    -directory : boolean
+    -children : List<FileNode>
+  }
+  class FileType <<base: enum>>
+  class FileTypeDetector <<base: util>>
+  class ArchiveTreePanel <<base: view>>
+  class FileContentPanel <<base: view>>
+  class StatusBarPanel <<base: view>>
+  class MenuBarFactory <<base: view builder>>
+  class ToolBarFactory <<base: view builder>>
+  class IconFactory <<base: util>>
+  class SwingUtils <<base: util>>
+  class WeeFsApp <<base: entry>>
+  class NfsConnectionConfig <<base: value object>>
+  class NfsConnectionDialog <<base: view>>
+
+  WeeFsApp --> ArchiveModel
+  WeeFsApp --> ArchiveController
+  WeeFsApp --> MainFrame
+  MainFrame --> ArchiveTreePanel
+  MainFrame --> FileContentPanel
+  MainFrame --> StatusBarPanel
+  MainFrame ..> MenuBarFactory
+  MainFrame ..> ToolBarFactory
+  ArchiveTreePanel --> ArchiveController
+  ArchiveTreePanel ..> FileNode
+  ArchiveTreePanel ..> IconFactory
+  FileContentPanel ..> FileNode
+  FileContentPanel ..> FileTypeDetector
+  StatusBarPanel --> ArchiveModel
+  MenuBarFactory ..> ArchiveController
+  ToolBarFactory ..> ArchiveController
+  FileTypeDetector --> FileType
+  ArchiveModel --> FileNode
+  ArchiveModel --> NfsConnectionConfig
+  NfsConnectionDialog ..> NfsConnectionConfig
+  ArchiveController ..> NfsConnectionDialog
+
 }
 
 ' =====================================================================
@@ -103,6 +145,14 @@ package "Filesystem (OCP / DIP violated)" #FFEBEB {
   FileSystemDriver <|.. ZipFileSystemDriver
   FileSystemDriver <|.. NfsFileSystemDriver
   FileSystemFactory o--> FileSystemDriver
+
+  ' --- supporting base classes ---
+  class ExtZipFileSystem <<base: weefs FS>>
+  class ExtZipFsProvider <<base: weefs FS>>
+  class NfsSftpFsProvider <<base: NFS FS>>
+  ZipFileSystemDriver --> ExtZipFsProvider
+  NfsFileSystemDriver --> NfsSftpFsProvider
+  ExtZipFsProvider --> ExtZipFileSystem
 }
 
 ' =====================================================================

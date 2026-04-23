@@ -118,7 +118,57 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
   ArchiveController --> IFileOperations
   ArchiveController --> ClipboardEntry
   MainFrame --> IArchiveController
-}
+
+  ' --- supporting base classes (unchanged across transition) ---
+  class FileNode <<base: tree node>> {
+    -name : String
+    -path : Path
+    -directory : boolean
+    -children : List<FileNode>
+  }
+  class FileType <<base: enum>>
+  class FileTypeDetector <<base: util>>
+  class ArchiveTreePanel <<base: view>>
+  class FileContentPanel <<base: view>>
+  class StatusBarPanel <<base: view>>
+  class MenuBarFactory <<base: view builder>>
+  class ToolBarFactory <<base: view builder>>
+  class IconFactory <<base: util>>
+  class SwingUtils <<base: util>>
+  class WeeFsApp <<base: entry>>
+  class NfsConnectionConfig <<base: value object>>
+  class NfsConnectionDialog <<base: view>>
+  class PropertiesDialog <<base: view>>
+  class AboutDialog <<base: view>>
+
+  WeeFsApp --> ArchiveModel
+  WeeFsApp --> ArchiveController
+  WeeFsApp --> MainFrame
+  WeeFsApp ..> SwingUtils
+  MainFrame --> ArchiveTreePanel
+  MainFrame --> FileContentPanel
+  MainFrame --> StatusBarPanel
+  MainFrame ..> MenuBarFactory
+  MainFrame ..> ToolBarFactory
+  MainFrame ..> AboutDialog
+  MainFrame ..> PropertiesDialog
+  MainFrame ..> NfsConnectionDialog
+  ArchiveTreePanel --> IArchiveController
+  ArchiveTreePanel ..> FileNode
+  ArchiveTreePanel ..> MountSession
+  ArchiveTreePanel ..> IconFactory
+  FileContentPanel ..> FileNode
+  FileContentPanel ..> FileTypeDetector
+  StatusBarPanel --> ArchiveModel
+  MenuBarFactory ..> IArchiveController
+  MenuBarFactory ..> INfsController
+  ToolBarFactory ..> IArchiveController
+  ToolBarFactory ..> INfsController
+  FileTypeDetector --> FileType
+  ArchiveModel --> FileNode
+  MountSession --> NfsConnectionConfig
+  ClipboardEntry --> FileNode
+  NfsConnectionDialog ..> NfsConnectionConfig
 
 ' =====================================================================
 ' Filesystem SPI — OCP/DIP restored
@@ -159,6 +209,12 @@ package "Filesystem SPI (OCP + DIP)" #E8F5E9 {
   FileSystemDriver <|.. NfsFileSystemDriver
   FileSystemFactory o--> FileSystemDriver
   ArchiveModel --> FileSystemFactory
+
+  ' --- supporting base classes ---
+  class ExtZipFileSystem <<base: weefs FS>>
+  class ExtZipFsProvider <<base: weefs FS>>
+  ZipFileSystemDriver --> ExtZipFsProvider
+  ExtZipFsProvider --> ExtZipFileSystem
 }
 
 ' =====================================================================
