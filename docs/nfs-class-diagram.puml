@@ -361,4 +361,31 @@ NfsParsedUri ..> NfsSftpConfig : <<parse result>>
 SftpArchiveServer ..> SshServer
 SftpArchiveServer ..> PasswordAuthenticator
 SftpArchiveServer ..> NfsSftpFsProvider
+
+' --- supplemental relationships ---
+NfsFileSystem --> NfsIO
+NfsFileSystem --> NfsFsProvider
+NfsFsProvider --> NfsIO
+NfsFsProvider --> NfsPath
+NfsFsProvider --> NfsConnectionConfig
+NfsIO --> NfsPath
+NfsIO --> NfsBasicFileAttributes
+NfsIO --> NfsDirectoryStream
+NfsDirectoryStream --> NfsDirectoryIterator
+NfsSftpFsIO --> NfsSftpConfig
+NfsSftpFsIO --> RemoteEntry
+NfsSftpFsIO --> RemoteFileStat
+NfsSftpFsProvider --> NfsSftpConfig
+NfsSftpFsProvider --> NfsParsedUri
+
+' --- supplemental relationships ---
+FileSystem <|-- NfsFileSystem
+IRemoteFileSystem <|.. NfsFileSystem
+FileSystemProvider <|-- NfsFsProvider
+FileSystemProvider <|-- NfsSftpFsProvider
+Path <|.. NfsPath
+SeekableByteChannel <|.. NfsSyncingByteChannel
+BasicFileAttributes <|.. NfsBasicFileAttributes
+NfsIO --> NfsFileSystem
+NfsDirectoryStream --> NfsIO
 @enduml

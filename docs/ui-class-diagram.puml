@@ -479,4 +479,38 @@ ArchiveController ..> IFileOperations
 UiIntegrationTest ..> ArchiveModel
 UiIntegrationTest ..> FileOperations
 
+
+' --- supplemental relationships ---
+MenuBarFactory ..> INfsController
+ToolBarFactory ..> INfsController
+MenuBarFactory ..> ArchiveController
+ToolBarFactory ..> ArchiveController
+MainFrame ..> AboutDialog
+MainFrame ..> PropertiesDialog
+MainFrame ..> NfsConnectionDialog
+MainFrame ..> MountSession
+MainFrame ..> SwingUtils
+ArchiveTreePanel ..> FileNode
+ArchiveTreePanel ..> MountSession
+ArchiveTreePanel ..> SessionNodeData
+ArchiveTreePanel ..> PropertiesDialog
+ArchiveTreePanel ..> FileTypeDetector
+ArchiveTreePanel ..> SwingUtils
+FileContentPanel ..> FileNode
+StatusBarPanel ..> FileNode
+StatusBarPanel ..> FileTypeDetector
+ArchiveController ..> FileNode
+ArchiveController ..> MountSession
+ArchiveController ..> ArchiveFormatOption
+ArchiveController ..> ClipboardEntry
+WeeFsApp ..> SwingUtils
+IconFactory ..> PaintedIcon
+RemoteMountManager ..> MountSession
+ClipboardEntry --> FileNode
+PropertiesDialog ..> FileNode
+AboutDialog ..> SwingUtils
+
+' --- supplemental relationships ---
+IFileOperations <|.. FileOperations
+IFileOperations <|.. NfsFileOperations
 @enduml

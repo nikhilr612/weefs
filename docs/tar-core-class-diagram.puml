@@ -273,4 +273,13 @@ note bottom of ArchiveFormat
   work to ExtZipFsIO + compression
   strategies.
 end note
+
+' --- supplemental relationships ---
+ArchiveFormatDetector --> ArchiveContainerType
+
+' --- supplemental relationships ---
+FileSystem <|-- ExtZipFileSystem
+FileSystemProvider <|-- ExtZipFsProvider
+Path <|.. ExtZipPath
+ArchiveFormatDetector --> ArchiveFormats
 @enduml
