@@ -17,6 +17,25 @@ commons_io_version := "2.18.0"
 commons_io_jar     := "lib/commons-io-" + commons_io_version + ".jar"
 commons_io_url     := "https://repo1.maven.org/maven2/commons-io/commons-io/" + commons_io_version + "/commons-io-" + commons_io_version + ".jar"
 
+sshd_core_version := "2.11.0"
+sshd_core_jar     := "lib/sshd-core-" + sshd_core_version + ".jar"
+sshd_core_url     := "https://repo1.maven.org/maven2/org/apache/sshd/sshd-core/" + sshd_core_version + "/sshd-core-" + sshd_core_version + ".jar"
+
+sshd_sftp_version := "2.11.0"
+sshd_sftp_jar     := "lib/sshd-sftp-" + sshd_sftp_version + ".jar"
+sshd_sftp_url     := "https://repo1.maven.org/maven2/org/apache/sshd/sshd-sftp/" + sshd_sftp_version + "/sshd-sftp-" + sshd_sftp_version + ".jar"
+
+sshd_common_version := "2.17.1"
+sshd_common_jar     := "lib/sshd-common-" + sshd_common_version + ".jar"
+sshd_common_url     := "https://repo1.maven.org/maven2/org/apache/sshd/sshd-common/" + sshd_common_version + "/sshd-common-" + sshd_common_version + ".jar"
+
+slf4j_version := "2.0.16"
+slf4j_api_jar := "lib/slf4j-api-" + slf4j_version + ".jar"
+slf4j_api_url := "https://repo1.maven.org/maven2/org/slf4j/slf4j-api/" + slf4j_version + "/slf4j-api-" + slf4j_version + ".jar"
+slf4j_simple_jar := "lib/slf4j-simple-" + slf4j_version + ".jar"
+slf4j_simple_url := "https://repo1.maven.org/maven2/org/slf4j/slf4j-simple/" + slf4j_version + "/slf4j-simple-" + slf4j_version + ".jar"
+
+# Download dependencies from Maven Central if not already present
 flatlaf_version := "3.5.4"
 flatlaf_jar     := "lib/flatlaf-" + flatlaf_version + ".jar"
 flatlaf_url     := "https://repo1.maven.org/maven2/com/formdev/flatlaf/" + flatlaf_version + "/flatlaf-" + flatlaf_version + ".jar"
@@ -29,6 +48,11 @@ deps:
 	[ -f "{{xz_jar}}" ] || curl -fsSL -o "{{xz_jar}}" "{{xz_url}}"
 	[ -f "{{commons_io_jar}}" ] || curl -fsSL -o "{{commons_io_jar}}" "{{commons_io_url}}"
 	[ -f "{{jsch_jar}}" ] || curl -fsSL -o "{{jsch_jar}}" "{{jsch_url}}"
+	[ -f "{{sshd_core_jar}}" ] || curl -fsSL -o "{{sshd_core_jar}}" "{{sshd_core_url}}"
+	[ -f "{{sshd_sftp_jar}}" ] || curl -fsSL -o "{{sshd_sftp_jar}}" "{{sshd_sftp_url}}"
+	[ -f "{{sshd_common_jar}}" ]  || curl -fsSL -o "{{sshd_common_jar}}"  "{{sshd_common_url}}"
+	[ -f "{{slf4j_api_jar}}" ]    || curl -fsSL -o "{{slf4j_api_jar}}"    "{{slf4j_api_url}}"
+	[ -f "{{slf4j_simple_jar}}" ] || curl -fsSL -o "{{slf4j_simple_jar}}" "{{slf4j_simple_url}}"
 	[ -f "{{flatlaf_jar}}" ] || curl -fsSL -o "{{flatlaf_jar}}" "{{flatlaf_url}}"
 
 build: deps
@@ -42,6 +66,8 @@ run-ui: build
 	java -cp "bin:lib/*" io.wfs.ui.MainLauncher
 run-gui:
 	java -jar bin/artifact.jar gui
+run-sftp-server: build
+	java -jar bin/artifact.jar sftp-server archive.zip 8888 dev dev
 test-ui: build
 	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
 test-unit: build

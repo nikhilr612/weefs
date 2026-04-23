@@ -65,6 +65,10 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public IFileOperations getFileOps() {
+        /*
+        PATCH: Loads model config into nfsFileOps every time getFileOps is called
+        REASON: Guarantees that the return object contains the latest session details
+        */
         if (isNfsMounted() && model.getNfsConfig() != null) {
             nfsFileOps.setConfig(model.getNfsConfig());
             return nfsFileOps;
