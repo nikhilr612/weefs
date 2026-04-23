@@ -4,7 +4,6 @@ import io.wfs.ui.controller.ArchiveController;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.MountSession;
-import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
