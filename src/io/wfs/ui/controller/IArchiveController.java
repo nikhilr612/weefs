@@ -55,6 +55,12 @@ public interface IArchiveController {
     // ── Archive lifecycle ─────────────────────────────────────────────
 
     /**
+     * Prompts the user to choose a local directory and mounts it
+     * as a browsable (read-write or read-only) file system.
+     */
+    void openDirectory();
+
+    /**
      * Prompts the user to choose an archive file and an access mode
      * (read-write / read-only), then mounts it via the model.
      */
@@ -73,7 +79,48 @@ public interface IArchiveController {
     void createArchive();
 
     /**
-     * Flushes and unmounts the currently open archive.
+     * Marks the currently selected file/directory for copying (non-destructive).
+     * No-op if nothing is selected.
+     */
+    void copySelected();
+
+    /**
+     * Marks the currently selected file/directory for moving (cut).
+     * No-op if nothing is selected.
+     */
+    void cutSelected();
+
+    /**
+     * Pastes the clipboard entry into the target directory of the current selection
+     * (or the session root if nothing is selected).
+     * No-op if the clipboard is empty or the destination is read-only.
+     */
+    void pasteSelected();
+
+    /**
+     * Returns {@code true} if there is a pending clipboard entry (copy or cut).
+     */
+    boolean hasClipboard();
+
+    /**
+     * Closes and removes the mount session with the given ID.
+     * No-op if the ID is not found.
+     *
+     * @param sessionId the UUID of the session to close
+     */
+    void closeSession(String sessionId);
+
+    /**
+     * Saves (flushes) the archive session with the given ID by closing its
+     * underlying filesystem (which writes the archive to disk) and reopening it.
+     * No-op for directory mounts, NFS sessions, read-only sessions, or unknown IDs.
+     *
+     * @param sessionId the UUID of the session to save
+     */
+    void saveSession(String sessionId);
+
+    /**
+     * Flushes and unmounts the currently active archive session.
      * No-op if no archive is mounted.
      */
     void closeArchive();

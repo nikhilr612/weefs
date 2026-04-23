@@ -22,7 +22,7 @@ public final class AboutDialog extends JDialog {
         content.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
 
         JLabel title = new JLabel("weefs Archive Explorer");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
+        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 6f));
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel version = new JLabel("Version 1.0");
@@ -34,7 +34,8 @@ public final class AboutDialog extends JDialog {
         desc.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel license = new JLabel("MIT License");
-        license.setForeground(Color.GRAY);
+        Color hint = UIManager.getColor("Label.disabledForeground");
+        license.setForeground(hint != null ? hint : Color.GRAY);
         license.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         content.add(title);

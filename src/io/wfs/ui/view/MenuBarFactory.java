@@ -3,6 +3,7 @@ package io.wfs.ui.view;
 import io.wfs.ui.controller.IArchiveController;
 import io.wfs.ui.controller.INfsController;
 import io.wfs.ui.model.ArchiveModel;
+import io.wfs.ui.util.SwingUtils;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
@@ -45,12 +46,17 @@ public final class MenuBarFactory {
         open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
         open.addActionListener(e -> controller.openArchive());
 
+        JMenuItem openDir = new JMenuItem("Open Directory...");
+        openDir.setAccelerator(
+                KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK));
+        openDir.addActionListener(e -> controller.openDirectory());
+
         JMenuItem mountNfs = new JMenuItem("Mount NFS...");
         mountNfs.setAccelerator(
             KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         mountNfs.addActionListener(e -> controller.mountNfs());
 
-        JMenuItem close = new JMenuItem("Close Archive");
+        JMenuItem close = new JMenuItem("Close Active Mount");
         close.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
         close.addActionListener(e -> controller.closeArchive());
 
@@ -90,6 +96,7 @@ public final class MenuBarFactory {
 
         menu.add(newArchive);
         menu.add(open);
+        menu.add(openDir);
         menu.add(mountNfs);
         menu.addSeparator();
         menu.add(close);
@@ -177,6 +184,18 @@ public final class MenuBarFactory {
                 KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         newDir.addActionListener(e -> controller.newDirectory());
 
+        JMenuItem copy = new JMenuItem("Copy");
+        copy.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK));
+        copy.addActionListener(e -> controller.copySelected());
+
+        JMenuItem cut = new JMenuItem("Cut");
+        cut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, InputEvent.CTRL_DOWN_MASK));
+        cut.addActionListener(e -> controller.cutSelected());
+
+        JMenuItem paste = new JMenuItem("Paste");
+        paste.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK));
+        paste.addActionListener(e -> controller.pasteSelected());
+
         JMenuItem rename = new JMenuItem("Rename...");
         rename.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0));
         rename.addActionListener(e -> controller.renameSelected());
@@ -191,6 +210,10 @@ public final class MenuBarFactory {
         menu.add(newFile);
         menu.add(newDir);
         menu.addSeparator();
+        menu.add(copy);
+        menu.add(cut);
+        menu.add(paste);
+        menu.addSeparator();
         menu.add(rename);
         menu.add(delete);
         menu.addSeparator();
@@ -199,14 +222,24 @@ public final class MenuBarFactory {
         // Enable/disable
         Runnable updateEditItems = () -> {
             boolean canEdit = model.isOpen() && !model.isReadOnly();
+            boolean hasSel = model.getSelectedFile() != null;
             newFile.setEnabled(canEdit);
             newDir.setEnabled(canEdit);
-            rename.setEnabled(canEdit && model.getSelectedFile() != null);
-            delete.setEnabled(canEdit && model.getSelectedFile() != null);
-            extract.setEnabled(model.isOpen() && model.getSelectedFile() != null
+            copy.setEnabled(hasSel);
+            cut.setEnabled(canEdit && hasSel);
+            paste.setEnabled(controller.hasClipboard() && canEdit);
+            rename.setEnabled(canEdit && hasSel);
+            delete.setEnabled(canEdit && hasSel);
+            extract.setEnabled(model.isOpen() && hasSel
                     && !model.getSelectedFile().isDirectory());
         };
         model.addPropertyChangeListener(evt -> SwingUtilities.invokeLater(updateEditItems));
+        // Also refresh on menu open so clipboard state (copy/cut→paste) is current
+        menu.addMenuListener(new javax.swing.event.MenuListener() {
+            @Override public void menuSelected(javax.swing.event.MenuEvent e) { updateEditItems.run(); }
+            @Override public void menuDeselected(javax.swing.event.MenuEvent e) {}
+            @Override public void menuCanceled(javax.swing.event.MenuEvent e) {}
+        });
         updateEditItems.run();
 
         return menu;
@@ -221,6 +254,14 @@ public final class MenuBarFactory {
         refresh.addActionListener(e -> model.fireTreeRefresh());
 
         menu.add(refresh);
+        menu.addSeparator();
+
+        JCheckBoxMenuItem darkTheme = new JCheckBoxMenuItem("Dark Theme", SwingUtils.isDarkTheme());
+        darkTheme.addActionListener(e -> {
+            SwingUtils.toggleTheme();
+            darkTheme.setSelected(SwingUtils.isDarkTheme());
+        });
+        menu.add(darkTheme);
 
         return menu;
     }

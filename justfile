@@ -36,6 +36,11 @@ slf4j_simple_jar := "lib/slf4j-simple-" + slf4j_version + ".jar"
 slf4j_simple_url := "https://repo1.maven.org/maven2/org/slf4j/slf4j-simple/" + slf4j_version + "/slf4j-simple-" + slf4j_version + ".jar"
 
 # Download dependencies from Maven Central if not already present
+flatlaf_version := "3.5.4"
+flatlaf_jar     := "lib/flatlaf-" + flatlaf_version + ".jar"
+flatlaf_url     := "https://repo1.maven.org/maven2/com/formdev/flatlaf/" + flatlaf_version + "/flatlaf-" + flatlaf_version + ".jar"
+
+# Download jtar from Maven Central if it is not already present
 deps:
 	mkdir -p lib
 	[ -f "{{jtar_jar}}" ] || curl -fsSL -o "{{jtar_jar}}" "{{jtar_url}}"
@@ -48,6 +53,7 @@ deps:
 	[ -f "{{sshd_common_jar}}" ]  || curl -fsSL -o "{{sshd_common_jar}}"  "{{sshd_common_url}}"
 	[ -f "{{slf4j_api_jar}}" ]    || curl -fsSL -o "{{slf4j_api_jar}}"    "{{slf4j_api_url}}"
 	[ -f "{{slf4j_simple_jar}}" ] || curl -fsSL -o "{{slf4j_simple_jar}}" "{{slf4j_simple_url}}"
+	[ -f "{{flatlaf_jar}}" ] || curl -fsSL -o "{{flatlaf_jar}}" "{{flatlaf_url}}"
 
 build: deps
 	rm -f bin/artifact.jar

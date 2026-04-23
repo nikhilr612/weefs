@@ -13,6 +13,8 @@ public class App {
                 case "integration":
                     ArchiveIntegrationTest.run();
                     NfsIntegrationTest.run();
+                    ArchiveCopyTest.run();
+                    NFSIntegrationTest.runIfConfigured();
                     break;
                 case "nfs-integration":
                     NfsIntegrationTest.run();
@@ -33,6 +35,7 @@ public class App {
                     ModelTest.run();
                     UtilTest.run();
                     ArchiveIntegrationTest.run();
+                    ArchiveCopyTest.run();
                     NfsIntegrationTest.run();
                     break;
                 case "gui":

@@ -44,14 +44,13 @@ public final class FileContentPanel extends JPanel {
         this.controller = controller;
 
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("File Viewer"));
 
         // ── Header bar ──
         JPanel header = new JPanel(new BorderLayout(8, 0));
         header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 
         fileNameLabel = new JLabel(" ");
-        fileNameLabel.setFont(fileNameLabel.getFont().deriveFont(Font.BOLD, 13f));
+        fileNameLabel.setFont(fileNameLabel.getFont().deriveFont(Font.BOLD));
         header.add(fileNameLabel, BorderLayout.CENTER);
 
         saveButton = new JButton("Save");
@@ -68,12 +67,12 @@ public final class FileContentPanel extends JPanel {
 
         // Empty placeholder
         emptyLabel = new JLabel("Select a file to view its contents", SwingConstants.CENTER);
-        emptyLabel.setForeground(Color.GRAY);
+        emptyLabel.setForeground(hintColor());
         cards.add(emptyLabel, CARD_EMPTY);
 
         // Text editor
         textArea = new JTextArea();
-        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        textArea.setFont(monoFont());
         textArea.setTabSize(4);
         textArea.setLineWrap(false);
         // Ctrl+S in editor should save the current file content, not close/reopen the whole archive.
@@ -92,9 +91,8 @@ public final class FileContentPanel extends JPanel {
 
         // Hex viewer
         hexArea = new JTextArea();
-        hexArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        hexArea.setFont(monoFont());
         hexArea.setEditable(false);
-        hexArea.setBackground(new Color(245, 245, 245));
         cards.add(new JScrollPane(hexArea), CARD_HEX);
 
         // Image preview
@@ -104,7 +102,7 @@ public final class FileContentPanel extends JPanel {
 
         // Directory info
         directoryLabel = new JLabel("", SwingConstants.CENTER);
-        directoryLabel.setForeground(Color.GRAY);
+        directoryLabel.setForeground(hintColor());
         cards.add(directoryLabel, CARD_DIR);
 
         add(cards, BorderLayout.CENTER);
@@ -113,6 +111,28 @@ public final class FileContentPanel extends JPanel {
 
         // Listen for file selection changes
         model.addPropertyChangeListener(this::onModelChange);
+    }
+
+    /** Returns a monospaced font sized to the current L&F default. */
+    private static Font monoFont() {
+        Font base = UIManager.getFont("Label.font");
+        int size = (base != null) ? base.getSize() : 13;
+        return new Font(Font.MONOSPACED, Font.PLAIN, size);
+    }
+
+    /** Returns the hint/placeholder colour from the L&F, falling back to gray. */
+    private static Color hintColor() {
+        Color c = UIManager.getColor("Label.disabledForeground");
+        return (c != null) ? c : Color.GRAY;
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (emptyLabel != null) emptyLabel.setForeground(hintColor());
+        if (directoryLabel != null) directoryLabel.setForeground(hintColor());
+        if (textArea != null) textArea.setFont(monoFont());
+        if (hexArea != null) hexArea.setFont(monoFont());
     }
 
     private void onModelChange(PropertyChangeEvent evt) {
@@ -294,9 +314,13 @@ public final class FileContentPanel extends JPanel {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g;
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g2.setColor(new Color(240, 240, 240));
+            Color gutterBg = UIManager.getColor("Panel.background");
+            Color gutterFg = UIManager.getColor("Label.disabledForeground");
+            if (gutterBg == null) gutterBg = new Color(240, 240, 240);
+            if (gutterFg == null) gutterFg = new Color(160, 160, 160);
+            g2.setColor(gutterBg);
             g2.fillRect(0, 0, getWidth(), getHeight());
-            g2.setColor(new Color(160, 160, 160));
+            g2.setColor(gutterFg);
             g2.setFont(getFont());
 
             FontMetrics fm = g2.getFontMetrics();

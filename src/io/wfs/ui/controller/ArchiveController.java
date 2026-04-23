@@ -2,6 +2,7 @@ package io.wfs.ui.controller;
 
 import io.wfs.ui.model.ArchiveModel;
 import io.wfs.ui.model.FileNode;
+import io.wfs.ui.model.MountSession;
 import io.wfs.ui.util.UIUtils;
 
 import javax.swing.*;
@@ -41,6 +42,11 @@ public final class ArchiveController implements IArchiveController, INfsControll
     private final NfsFileOperations nfsFileOps;
     private Component parentComponent;
 
+    /** Pending clipboard entry — null when empty. */
+    private ClipboardEntry clipboard;
+
+    private record ClipboardEntry(FileNode node, boolean cut, String sourceSessionId) {}
+
     public ArchiveController(ArchiveModel model) {
         this.model = model;
         this.fileOps = new FileOperations(model);
@@ -59,13 +65,55 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public IFileOperations getFileOps() {
-        // URI-mounted remotes (weefs://) expose a normal FileSystem via the model,
-        // so file mutations must go through FileOperations. Legacy NfsFileOperations
-        // is only valid when an explicit NfsConnectionConfig is mounted.
-        return model.isNfsMounted() ? nfsFileOps : fileOps;
+        /*
+        PATCH: Loads model config into nfsFileOps every time getFileOps is called
+        REASON: Guarantees that the return object contains the latest session details
+        */
+        if (isNfsMounted() && model.getNfsConfig() != null) {
+            nfsFileOps.setConfig(model.getNfsConfig());
+            return nfsFileOps;
+        }
+        return fileOps;
     }
 
     // ── Archive-level actions ──────────────────────────────────────────
+
+    @Override
+    public void openDirectory() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Open Directory");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(false);
+
+        if (chooser.showOpenDialog(parentComponent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path selected = chooser.getSelectedFile().toPath().toAbsolutePath().normalize();
+
+        int mode = JOptionPane.showOptionDialog(parentComponent,
+                "Open directory in which mode?",
+                "Open Mode",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new String[] { "Read/Write", "Read Only" },
+                "Read/Write");
+
+        if (mode == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+
+        boolean readOnly = (mode == 1);
+
+        executeInBackground("Opening directory...", () -> {
+            try {
+                model.openDirectory(selected, readOnly);
+            } catch (IOException ex) {
+                showError("Open Directory", ex);
+            }
+        });
+    }
 
     @Override
     public void openArchive() {
@@ -97,7 +145,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Opening archive...", () -> {
             try {
-                clearNfsIfMounted();
                 model.openArchive(selected, readOnly);
             } catch (IOException ex) {
                 showError("Open Archive", ex);
@@ -188,7 +235,6 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
         executeInBackground("Creating archive...", () -> {
             try {
-                clearNfsIfMounted();
                 model.createArchive(selectedWithExtension);
             } catch (IOException ex) {
                 showError("Create Archive", ex);
@@ -198,28 +244,53 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void closeArchive() {
-        executeInBackground("Closing archive...", () -> {
+        MountSession active = model.getActiveSession();
+        if (active == null) return;
+        closeSession(active.getId());
+    }
+
+    @Override
+    public void closeSession(String sessionId) {
+        executeInBackground("Closing...", () -> {
             try {
-                model.closeArchive();
+                model.closeSession(sessionId);
             } catch (IOException ex) {
-                showError("Close Archive", ex);
+                showError("Close", ex);
             }
         });
     }
 
     @Override
     public void saveArchive() {
-        if (!model.isOpen() || model.isReadOnly())
-            return;
+        if (!model.isOpen() || model.isReadOnly()) return;
         executeInBackground("Saving archive...", () -> {
             try {
+                MountSession active = model.getActiveSession();
+                if (active == null || active.isReadOnly()) return;
                 Path archiveToReopen = model.getArchivePath();
-                model.closeArchive();
+                model.closeSession(active.getId());
                 if (archiveToReopen != null) {
                     model.openArchive(archiveToReopen, false);
                 }
             } catch (IOException ex) {
                 showError("Save Archive", ex);
+            }
+        });
+    }
+
+    @Override
+    public void saveSession(String sessionId) {
+        MountSession session = model.getSession(sessionId);
+        if (session == null || !session.isSaveable()) return;
+        Path archivePath = session.getDisplayPath();
+        executeInBackground("Saving...", () -> {
+            try {
+                model.closeSession(sessionId);
+                if (archivePath != null) {
+                    model.openArchive(archivePath, false);
+                }
+            } catch (IOException ex) {
+                showError("Save", ex);
             }
         });
     }
@@ -317,6 +388,114 @@ public final class ArchiveController implements IArchiveController, INfsControll
         getFileOps().saveFile(path, content);
     }
 
+    // ── Clipboard operations ───────────────────────────────────────────
+
+    @Override
+    public void copySelected() {
+        FileNode sel = model.getSelectedFile();
+        MountSession active = model.getActiveSession();
+        if (sel != null) clipboard = new ClipboardEntry(sel, false,
+                active != null ? active.getId() : null);
+    }
+
+    @Override
+    public void cutSelected() {
+        FileNode sel = model.getSelectedFile();
+        MountSession active = model.getActiveSession();
+        if (sel != null) clipboard = new ClipboardEntry(sel, true,
+                active != null ? active.getId() : null);
+    }
+
+    @Override
+    public boolean hasClipboard() {
+        return clipboard != null;
+    }
+
+    @Override
+    public void pasteSelected() {
+        if (clipboard == null || !model.isOpen() || model.isReadOnly()) return;
+        Path targetDir = resolveTargetDirectory();
+        if (targetDir == null) return;
+
+        final ClipboardEntry entry = clipboard;
+        if (entry.cut()) clipboard = null; // consume cut immediately
+
+        executeInBackground("Pasting...", () -> {
+            try {
+                doPaste(entry, targetDir);
+                model.fireTreeRefresh();
+            } catch (IOException ex) {
+                showError("Paste", ex);
+            }
+        });
+    }
+
+    private void doPaste(ClipboardEntry entry, Path targetDir) throws IOException {
+        FileNode src = entry.node();
+        String name = src.getPath().getFileName() != null
+                ? src.getPath().getFileName().toString()
+                : src.getDisplayName();
+        Path dest = targetDir.resolve(name);
+
+        boolean sameFs = src.getPath().getFileSystem() == dest.getFileSystem();
+
+        if (src.isDirectory()) {
+            copyDirectoryRecursive(src.getPath(), dest, sameFs, entry.cut(), entry.sourceSessionId());
+        } else {
+            copySingleFile(src.getPath(), dest, sameFs, entry.cut(), entry.sourceSessionId());
+        }
+    }
+
+    private void copySingleFile(Path src, Path dest, boolean sameFs,
+            boolean deleteSource, String srcSessionId) throws IOException {
+        if (sameFs) {
+            if (deleteSource) {
+                java.nio.file.Files.move(src, dest,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                java.nio.file.Files.copy(src, dest,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } else {
+            // Cross-filesystem: read bytes from source using the correct session backend.
+            byte[] data = readBytesFromSession(srcSessionId, src);
+            java.nio.file.Files.write(dest, data,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            if (deleteSource) java.nio.file.Files.deleteIfExists(src);
+        }
+    }
+
+    /**
+     * Reads the bytes of {@code path} via the session identified by {@code sessionId}.
+     * Falls back to the model's generic read (which does FS-matching then activeSession)
+     * for non-NFS sessions — they don't need special routing since the Path already
+     * carries the correct FileSystem.
+     */
+    private byte[] readBytesFromSession(String sessionId, Path path) throws IOException {
+        if (sessionId != null) {
+            MountSession session = model.getSession(sessionId);
+            if (session != null && session.isNfsMounted() && session.getNfsConfig() != null) {
+                return io.wfs.core.nfs.NfsIO.readFile(session.getNfsConfig(), path.toString());
+            }
+        }
+        return model.readFileBytes(path);
+    }
+
+    private void copyDirectoryRecursive(Path srcDir, Path destDir, boolean sameFs,
+            boolean deleteSource, String srcSessionId) throws IOException {
+        java.nio.file.Files.createDirectories(destDir);
+        for (io.wfs.ui.model.FileNode child : model.listChildren(srcDir)) {
+            Path childDest = destDir.resolve(child.getPath().getFileName().toString());
+            if (child.isDirectory()) {
+                copyDirectoryRecursive(child.getPath(), childDest, sameFs, deleteSource, srcSessionId);
+            } else {
+                copySingleFile(child.getPath(), childDest, sameFs, deleteSource, srcSessionId);
+            }
+        }
+        if (deleteSource && sameFs) java.nio.file.Files.deleteIfExists(srcDir);
+    }
+
     // ── NFS operations (INfsController implementation) ───────────────────
 
     @Override
@@ -326,21 +505,23 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     @Override
     public void unmountNfs() {
-        if (!model.isRemoteMounted() && !model.isNfsMounted()) {
-            return;
-        }
-
-        executeInBackground("Unmounting NFS...", () -> {
+        executeInBackground("Unmounting...", () -> {
             try {
-                if (model.isRemoteMounted()) {
-                    model.closeArchive();
+                MountSession active = model.getActiveSession();
+                MountSession target = null;
+                if (active != null && (active.isNfsMounted() || active.isRemoteMounted())) {
+                    target = active;
                 } else {
-                    nfsFileOps.setConfig(null);
-                    model.setNfsConfig(null);
+                    for (MountSession s : model.getSessions()) {
+                        if (s.isNfsMounted() || s.isRemoteMounted()) { target = s; break; }
+                    }
                 }
-                model.fireTreeRefresh();
+                if (target != null) {
+                    if (target.isNfsMounted()) nfsFileOps.setConfig(null);
+                    model.closeSession(target.getId());
+                }
             } catch (Exception ex) {
-                showError("Unmount NFS", ex);
+                showError("Unmount", ex);
             }
         });
     }
@@ -507,12 +688,5 @@ public final class ArchiveController implements IArchiveController, INfsControll
 
     private void showError(String operation, Exception ex) {
         UIUtils.showError(parentComponent, operation, ex);
-    }
-
-    private void clearNfsIfMounted() throws IOException {
-        if (model.isNfsMounted()) {
-            nfsFileOps.setConfig(null);
-            model.setNfsConfig(null);
-        }
     }
 }
