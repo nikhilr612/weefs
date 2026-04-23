@@ -7,6 +7,12 @@ state NoSessions {
   NoSessions : do / await open action
 }
 
+NoSessions  -right-> HasSessions : session opened\n(archive, directory, or remote mount)
+HasSessions -left->  NoSessions  : last session closed
+HasSessions -right-> HasSessions : another session opened\nor active session switched
+HasSessions -down->  [*]         : app exits\n(open archive sessions flushed)
+NoSessions  -down->  [*]         : app exits
+
 state HasSessions {
   [*] --> Browsing
 
@@ -21,20 +27,14 @@ state HasSessions {
   }
 
   state Saving {
-    Saving : do / repack archive from temp\ndirectory to original file on disk
+    Saving : do / close session — ExtZipFileSystem\nwrites temp directory to archive file on close;\nthen archive is reopened as a new session
   }
 
   Browsing  --> Operating : file operation triggered
   Operating --> Browsing  : operation complete or failed
-  Browsing  --> Saving    : save archive requested
-  Saving    --> Browsing  : save complete
+  Browsing  --> Saving    : save archive requested\n[saveable session: writable, local archive]
+  Saving    --> Browsing  : archive reopened
 }
-
-NoSessions  --> HasSessions : session opened\n(archive, directory, or remote mount)
-HasSessions --> HasSessions : another session opened or active session switched
-HasSessions --> NoSessions  : last session closed
-HasSessions --> [*]         : app exits\n(open archive sessions flushed)
-NoSessions  --> [*]         : app exits
 
 note right of HasSessions
   Multiple sessions may be open simultaneously.

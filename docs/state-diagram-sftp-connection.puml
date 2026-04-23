@@ -7,45 +7,39 @@ state Unbound {
   Unbound : do / await mount request;\nno connection established
 }
 
-state Mounted {
-  Mounted : entry / auth env var resolved;\nremote root verified via one-off SFTP check
-  Mounted : do / accept file operations;\neach opens a short-lived SFTP session,\ncompletes the work, then disconnects
-  Mounted : exit / flush any open byte channels
-}
-
 state Error {
   Error : entry / record failure cause
   Error : do / await retry or dismiss
 }
 
-Unbound --> Mounted : newFileSystem()\n[auth env var present;\nremote root reachable]
-Unbound --> Error   : newFileSystem()\n[auth env var missing\nor connection refused]
-Mounted --> Unbound : close()
-Mounted --> Error   : I/O failure during operation
-Error   --> Unbound : retry / dismiss
-Error   --> [*]     : fatal error / app exit
-Unbound --> [*]     : filesystem closed
+Unbound -down->  Mounted : newFileSystem()\n[auth env var present;\nremote root reachable]
+Unbound -down->  Error   : newFileSystem()\n[auth env var missing\nor connection refused]
+Mounted -up->    Unbound : close()
+Error   -left->  Unbound : retry / dismiss
+Error   -down->  [*]     : fatal error / app exit
+
+state Mounted {
+  Mounted : entry / auth env var resolved;\nremote root verified via one-off SFTP check
+  Mounted : do / accept file operations;\neach opens a short-lived SFTP session,\ncompletes the work, then disconnects
+  Mounted : exit / unregister from provider map;\nremove JVM shutdown hook
+
+  state "Byte Channel (one per open file)" as BC {
+    [*] --> Open
+    Open : entry / buffer initialized from remote\ncontent (existing files), or empty for\nnew or truncated files
+    Open : do / reads and writes update the\nbuffer in memory; position tracked
+    Open --> Flushing : close() [dirty]
+    Open --> [*]      : close() [clean]
+    Flushing : do / write buffer to remote\nvia a new short-lived SFTP session
+    Flushing --> [*]  : flush complete
+  }
+}
 
 note right of Mounted
   No persistent TCP connection is maintained.
   Each file operation (list, stat, read, write,
   delete, rename) opens a fresh SSH/SFTP session
   per call and disconnects in a finally block.
-end note
-
-state "Byte Channel (one per open file)" as BC {
-  [*] --> Open
-  Open : entry / remote file content pre-loaded\ninto an in-memory byte buffer
-  Open : do / reads and writes update the\nbuffer in memory; position tracked
-  Open --> Flushing : close() [dirty]
-  Open --> [*]      : close() [clean — no remote write needed]
-  Flushing : do / write buffer to remote\nvia a new short-lived SFTP session
-  Flushing --> [*]  : flush complete
-}
-
-note right of BC
-  NfsSyncingByteChannel buffers file content
-  in memory. Remote I/O happens only once,
-  on close(), when the buffer has been modified.
+  I/O failures throw IOException to the caller;
+  the filesystem remains Mounted.
 end note
 @enduml
