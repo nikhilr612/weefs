@@ -1,51 +1,51 @@
 @startuml
-title SFTP Connection State Machine (NfsSftpFsProvider / NfsSyncingByteChannel)
+title SFTP Filesystem & Byte Channel States\n(NfsSftpFsProvider / NfsSyncingByteChannel)
 
-[*] --> Disconnected : NfsSftpFsProvider created
+[*] --> Unbound : provider created
 
-state Disconnected {
-  [*] --> AwaitingConfig
-  AwaitingConfig : no NfsSftpConfig bound yet
+state Unbound {
+  Unbound : do / await mount request;\nno connection established
 }
 
-state Connected {
-  [*] --> Idle
-  Idle     : channel open, no pending op
-  Reading  : ChannelSftp.get(path)
-  Writing  : buffer dirty = true
-  Flushing : NfsSftpFsIO.put() in progress
-
-  Idle    --> Reading  : read(ByteBuffer)
-  Reading --> Idle     : bytes delivered / EOF
-  Idle    --> Writing  : write(ByteBuffer)
-  Writing --> Idle     : buffer consumed
-  Idle    --> Flushing : close() [dirty]
-  Flushing --> Idle    : put complete [dirty = false]
+state Mounted {
+  Mounted : entry / auth env var resolved;\nremote root verified via one-off SFTP check
+  Mounted : do / accept file operations;\neach opens a short-lived SFTP session,\ncompletes the work, then disconnects
+  Mounted : exit / flush any open byte channels
 }
 
 state Error {
-  Error : I/O or auth failure
+  Error : entry / record failure cause
+  Error : do / await retry or dismiss
 }
 
-Disconnected --> Connected     : open(NfsSftpConfig, path)\nNfsSftpFsIO.connect(config)
-Disconnected --> Error         : AuthException / IOException
+Unbound --> Mounted : newFileSystem()\n[auth env var present;\nremote root reachable]
+Unbound --> Error   : newFileSystem()\n[auth env var missing\nor connection refused]
+Mounted --> Unbound : close()
+Mounted --> Error   : I/O failure during operation
+Error   --> Unbound : retry / dismiss
+Error   --> [*]     : fatal error / app exit
+Unbound --> [*]     : filesystem closed
 
-Connected    --> Disconnected  : close()\n[channel flushed if dirty]
-Connected    --> Error         : I/O failure mid-operation
-
-Error        --> Disconnected  : reconnect / user dismiss
-Disconnected --> [*]           : NfsFileSystem.close()
-Error        --> [*]           : fatal error / app exit
-
-note right of Connected
-  NfsSyncingByteChannel:
-    position is long (overflow-safe)
-    write() guards against buffer overflow
-    flushes on close() when dirty
+note right of Mounted
+  No persistent TCP connection is maintained.
+  Each file operation (list, stat, read, write,
+  delete, rename) opens a fresh SSH/SFTP session
+  per call and disconnects in a finally block.
 end note
 
-note left of Disconnected
-  NfsSftpConfig holds host, port, user,
-  and password loaded from env var.
+state "Byte Channel (one per open file)" as BC {
+  [*] --> Open
+  Open : entry / remote file content pre-loaded\ninto an in-memory byte buffer
+  Open : do / reads and writes update the\nbuffer in memory; position tracked
+  Open --> Flushing : close() [dirty]
+  Open --> [*]      : close() [clean — no remote write needed]
+  Flushing : do / write buffer to remote\nvia a new short-lived SFTP session
+  Flushing --> [*]  : flush complete
+}
+
+note right of BC
+  NfsSyncingByteChannel buffers file content
+  in memory. Remote I/O happens only once,
+  on close(), when the buffer has been modified.
 end note
 @enduml

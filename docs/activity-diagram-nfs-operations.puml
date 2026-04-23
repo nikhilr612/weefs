@@ -1,68 +1,59 @@
 @startuml
-title NFS / SFTP File Operations (extract · copy · delete · paste)
+title File Operations (extract · copy · delete · paste · rename)
 
 start
 
 :User selects node(s) in the tree
 and triggers an operation;
 
-:ArchiveController dispatches
-extractSelected or deleteSelected or
-copySelected or cutSelected or pasteSelected;
+:Controller dispatches the file operation
+to the active session;
 
 if (action is copy or cut?) then (yes)
-  :record selected FileNode +
-  sourceSessionId in ClipboardEntry;
+  :Record selected node(s) and
+  source session in clipboard;
   stop
 endif
 
-:Resolve active session's FileOperations:
-getFileOps() →
-  if session is NFS → NfsFileOperations(config)
-  else → FileOperations;
+:Resolve file operations strategy
+for the active session;
 note right
-  Both implement IFileOperations.
-  ArchiveController depends on the
-  interface, not the concrete class (DIP).
+  Remote and local sessions each have
+  their own strategy implementation.
+  The controller depends only on the
+  shared interface (Dependency Inversion).
 end note
 
-if (operation) then (extract)
-  :IFileOperations.extractTo(src, dest);
-  if (source is NFS?) then (yes)
-    :NfsSftpFsProvider.get(config, src)
-    streams bytes via
-    NfsSyncingByteChannel;
-    :write to local dest via FileUtils;
+if (operation?) then (extract)
+  :Copy file(s) to chosen local destination;
+  if (source is remote?) then (yes)
+    :Stream file bytes from remote session;
+    :Write to local destination;
   else (no)
-    :Files.copy / walk + copy
-    across FileSystem boundaries;
+    :Copy across filesystem boundary;
   endif
 
 else if (delete) then (yes)
-  :IFileOperations.delete(path);
+  :Delete path from active session;
   if (directory?) then (yes)
-    :FileUtils.deleteRecursively(path);
+    :Recursively delete all contents first;
   endif
 
 else if (paste) then (yes)
-  :resolve ClipboardEntry.sourceSessionId;
-  :read bytes via that session;
-  :write bytes into active session's
-  target directory;
+  :Read bytes from clipboard source session;
+  :Write bytes into active session target;
   if (was cut?) then (yes)
-    :delete source;
+    :Delete original from source session;
   endif
 
 else (rename)
-  :IFileOperations.rename(path, newName);
+  :Rename path within active session;
 endif
 
 if (success?) then (yes)
-  :ArchiveModel.fireTreeRefresh();
-  :ArchiveTreePanel repaints affected
-  session root(s);
+  :Refresh tree view for affected session(s);
 else (no)
-  :UIUtils.showError(parent, msg, ex);
+  :Show error message to user;
 endif
 
 stop

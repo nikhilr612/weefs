@@ -1,48 +1,46 @@
 @startuml
-title MountSession Lifecycle (good-design, multi-session)
+title MountSession Lifecycle
 
-[*] --> AppIdle : App starts
+[*] --> NoSessions : app starts
 
-state AppIdle {
-  [*] --> NoSessions
-  NoSessions : sessions.isEmpty() == true\nPROP_OPEN = false
+state NoSessions {
+  NoSessions : do / await open action
 }
 
 state HasSessions {
-  [*] --> Active
-  state Active {
-    Browsing   : list children of activeSession.rootPath
-    Extracting : IFileOperations.extractTo(src, dest)
-    Saving     : closeSession + reopen (ZIP flush)
+  [*] --> Browsing
 
-    Browsing   --> Extracting : extractSelected()
-    Extracting --> Browsing   : success / error
-    Browsing   --> Saving     : saveSession(id)
-    Saving     --> Browsing   : reopened
+  state Browsing {
+    Browsing : do / display session tree;\nrespond to file selection
   }
 
-  Active : activeSession != null\nPROP_ARCHIVE_PATH fired on switch
+  state Operating {
+    Operating : entry / start background task
+    Operating : do / execute file operation\n(extract, delete, copy, paste, rename)
+    Operating : exit / report result to user
+  }
+
+  state Saving {
+    Saving : do / repack archive from temp\ndirectory to original file on disk
+  }
+
+  Browsing  --> Operating : file operation triggered
+  Operating --> Browsing  : operation complete or failed
+  Browsing  --> Saving    : save archive requested
+  Saving    --> Browsing  : save complete
 }
 
-NoSessions  --> HasSessions  : openArchive(File) /\n openMountUri(URI) /\n mountNfs(config)\nPROP_SESSION_ADDED
-HasSessions --> HasSessions  : setActiveSession(id)\nPROP_ARCHIVE_PATH
-HasSessions --> HasSessions  : openArchive() ... (adds session)\nPROP_SESSION_ADDED
-HasSessions --> HasSessions  : closeSession(id)\nPROP_SESSION_REMOVED\n[sessions still non-empty]
-HasSessions --> NoSessions   : closeSession(id)\nPROP_SESSION_REMOVED\n[last session removed]\nPROP_OPEN = false
-
-AppIdle --> [*] : App exits\n(closeArchive flushes all)
+NoSessions  --> HasSessions : session opened\n(archive, directory, or remote mount)
+HasSessions --> HasSessions : another session opened or active session switched
+HasSessions --> NoSessions  : last session closed
+HasSessions --> [*]         : app exits\n(open archive sessions flushed)
+NoSessions  --> [*]         : app exits
 
 note right of HasSessions
-  ArchiveModel holds a List<MountSession>.
-  Opening another archive / directory / remote
-  ADDS a new session rather than replacing.
-  Each session owns its own FileSystem.
-end note
-
-note left of Active
-  Writable ZIP sessions are flushed
-  on close (isSaveable() == true).
-  Directory, NFS and weefs:// mounts
-  are write-through.
+  Multiple sessions may be open simultaneously.
+  Opening another archive adds a new session
+  rather than replacing the current one.
+  Archive sessions are flushed on close;
+  directory and remote mounts are write-through.
 end note
 @enduml

@@ -1,59 +1,41 @@
 @startuml
-title Open Archive / Mount Remote — URI routing in good-design
+title Open Archive / Mount Remote — URI routing
 
 start
 
 :User triggers open action
-(File chooser, Open Directory,
- NFS dialog, or URI input);
+(file chooser, open directory, or URI input);
 
-if (Input kind?) then (local file)
-  :ArchiveModel.openArchive(file, readOnly);
+if (Input kind?) then (local archive file)
   :Build xzip:// URI from file path;
-else if (directory) then (yes)
-  :ArchiveModel.openDirectory(dir);
-  :FileSystems.getDefault() used directly;
-else if (NFS dialog) then (yes)
-  :ArchiveModel.setNfsConfig(cfg)
-  → creates NFS MountSession;
-  stop
+else if (local directory) then (yes)
+  :Use default filesystem URI;
 else (URI string)
-  :ArchiveModel.openMountUri(uri, readOnly);
-  :Parse scheme;
+  :Parse scheme from URI;
 endif
 
-:FileSystemFactory.open(uri, env);
-note right: drivers discovered via\njava.util.ServiceLoader<FileSystemDriver>
+:Resolve filesystem driver by URI scheme;
+note right: drivers discovered via\njava.util.ServiceLoader
 
-if (scheme) then (xzip)
-  :ZipFileSystemDriver.open
-  (delegates to injected ExtZipFsProvider);
-  :ExtZipFileSystem returned;
+if (scheme?) then (xzip)
+  :Extract archive to isolated temp directory;
+  :Return archive-backed virtual FileSystem;
 else if (weefs) then (yes)
-  :NfsFileSystemDriver.open
-  (delegates to injected NfsSftpFsProvider);
-  :NfsParsedUri.parse → NfsSftpConfig;
   if (auth env var set?) then (yes)
-    :NfsFileSystem returned;
+    :Verify remote root is reachable;
+    :Return remote-backed FileSystem;
   else (no)
-    :throw IOException
-    "auth env var not set";
-    :UIUtils.showError();
+    :Report error — auth env var not set;
     stop
   endif
 else (file)
-  :LocalFileSystemDriver.open;
-  :FileSystems.getDefault();
+  :Return default local FileSystem;
 endif
 
-:Wrap in new MountSession
-(displayPath, readOnly, remoteMounted flags);
-:ArchiveModel.addSession(session);
-:Fire PROP_SESSION_ADDED
-+ PROP_ARCHIVE_PATH (+ PROP_REMOTE_MOUNTED if remote);
-
-:ArchiveTreePanel adds new root node
-for this session;
+:Wrap in new mount session
+(display path, read-only flag, remote flag);
+:Add session to model;
+:Notify views — tree adds new session root node;
 
 stop
 @enduml
