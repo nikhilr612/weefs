@@ -1,53 +1,59 @@
-@startuml activity-diagram-open-archive
-title Open Archive / Mount Remote — URI Routing via FileSystemFactory
+@startuml
+title Open Archive / Mount Remote — URI routing in good-design
 
 start
 
 :User triggers open action
-(File chooser or URI dialog);
+(File chooser, Open Directory,
+ NFS dialog, or URI input);
 
-if (Input is a File object?) then (yes)
-    :ArchiveModel.openArchive(file);
-    :Convert file to xzip:// URI;
-else (no — URI string)
-    :ArchiveModel.openMountUri(uri);
-    :Parse URI scheme;
+if (Input kind?) then (local file)
+  :ArchiveModel.openArchive(file, readOnly);
+  :Build xzip:// URI from file path;
+else if (directory) then (yes)
+  :ArchiveModel.openDirectory(dir);
+  :FileSystems.getDefault() used directly;
+else if (NFS dialog) then (yes)
+  :ArchiveModel.setNfsConfig(cfg)
+  → creates NFS MountSession;
+  stop
+else (URI string)
+  :ArchiveModel.openMountUri(uri, readOnly);
+  :Parse scheme;
 endif
 
 :FileSystemFactory.open(uri, env);
+note right: drivers discovered via\njava.util.ServiceLoader<FileSystemDriver>
 
-fork
-    :scheme == "xzip"?;
-    :ZipFileSystemDriver.open(uri, env);
-    :ExtZipFsProvider parses URI\n(ExtZipParsedUri);
-    :ExtZipFileSystem created\n(archive opened on disk);
-    :ArchiveModel stores ExtZipFileSystem;
-    :fire PROP_ARCHIVE_PATH;
-    :MenuBarFactory enables\nclose/extract menus;
-fork again
-    :scheme == "weefs"?;
-    :NfsFileSystemDriver.open(uri, env);
-    :NfsParsedUri.parse(uri)\n(host, port, path, auth env-var);
-    :Read password from env var;
-    if (env var set?) then (yes)
-        :NfsSftpConfig created;
-        :NfsSftpFsProvider injected into\nNfsFileSystemDriver (DIP);
-        :NfsFileSystem(NfsSftpFsProvider, NfsSftpConfig)\ncreated;
-        :ArchiveModel.remoteMounted = true;
-        :fire PROP_REMOTE_MOUNTED;
-        :MenuBarFactory enables\nunmount/extract menus;
-    else (no)
-        :Throw IOException\n("auth env var not set");
-        :UIUtils.showError() displayed;
-        stop
-    endif
-fork again
-    :scheme == "file"?;
-    :LocalFileSystemDriver.open(uri, env);
-    :FileSystems.getDefault() returned;
-end fork
+if (scheme) then (xzip)
+  :ZipFileSystemDriver.open
+  (delegates to injected ExtZipFsProvider);
+  :ExtZipFileSystem returned;
+else if (weefs) then (yes)
+  :NfsFileSystemDriver.open
+  (delegates to injected NfsSftpFsProvider);
+  :NfsParsedUri.parse → NfsSftpConfig;
+  if (auth env var set?) then (yes)
+    :NfsFileSystem returned;
+  else (no)
+    :throw IOException
+    "auth env var not set";
+    :UIUtils.showError();
+    stop
+  endif
+else (file)
+  :LocalFileSystemDriver.open;
+  :FileSystems.getDefault();
+endif
 
-:ArchiveTreePanel refreshes tree view;
+:Wrap in new MountSession
+(displayPath, readOnly, remoteMounted flags);
+:ArchiveModel.addSession(session);
+:Fire PROP_SESSION_ADDED
++ PROP_ARCHIVE_PATH (+ PROP_REMOTE_MOUNTED if remote);
+
+:ArchiveTreePanel adds new root node
+for this session;
 
 stop
 @enduml

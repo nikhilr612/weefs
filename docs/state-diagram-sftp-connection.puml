@@ -1,46 +1,51 @@
-@startuml state-diagram-sftp-connection
+@startuml
 title SFTP Connection State Machine (NfsSftpFsProvider / NfsSyncingByteChannel)
 
 [*] --> Disconnected : NfsSftpFsProvider created
 
 state Disconnected {
-    [*] --> AwaitingConfig
+  [*] --> AwaitingConfig
+  AwaitingConfig : no NfsSftpConfig bound yet
 }
 
 state Connected {
-    [*] --> Idle
-    Idle --> Reading    : read(ByteBuffer)\n[ChannelSftp.get()]
-    Reading --> Idle    : bytes returned / EOF
-    Idle --> Writing    : write(ByteBuffer)\n[buffer dirty = true]
-    Writing --> Idle    : ByteBuffer consumed
-    Idle --> Flushing   : close()\n[dirty == true]
-    Flushing --> Idle   : NfsSftpFsIO.put() complete\n[dirty = false]
+  [*] --> Idle
+  Idle     : channel open, no pending op
+  Reading  : ChannelSftp.get(path)
+  Writing  : buffer dirty = true
+  Flushing : NfsSftpFsIO.put() in progress
+
+  Idle    --> Reading  : read(ByteBuffer)
+  Reading --> Idle     : bytes delivered / EOF
+  Idle    --> Writing  : write(ByteBuffer)
+  Writing --> Idle     : buffer consumed
+  Idle    --> Flushing : close() [dirty]
+  Flushing --> Idle    : put complete [dirty = false]
 }
 
-state ChannelOpen <<fork>>
+state Error {
+  Error : I/O or auth failure
+}
 
-Disconnected --> ChannelOpen  : open(NfsSftpConfig, path)\nNfsSftpFsIO.connect(config)
-ChannelOpen --> Connected     : JSch session established\nNfsSyncingByteChannel created
-ChannelOpen --> Error         : AuthException / IOException
+Disconnected --> Connected     : open(NfsSftpConfig, path)\nNfsSftpFsIO.connect(config)
+Disconnected --> Error         : AuthException / IOException
 
-Connected --> Disconnected    : close()\n[NfsSyncingByteChannel flushed]
-Connected --> Error           : I/O failure during read/write
+Connected    --> Disconnected  : close()\n[channel flushed if dirty]
+Connected    --> Error         : I/O failure mid-operation
 
-Error --> Disconnected        : reconnect attempt\nor user dismisses error dialog
-
-Disconnected --> [*]  : NfsFileSystem.close()
-Error --> [*]         : fatal error / app exit
+Error        --> Disconnected  : reconnect / user dismiss
+Disconnected --> [*]           : NfsFileSystem.close()
+Error        --> [*]           : fatal error / app exit
 
 note right of Connected
   NfsSyncingByteChannel:
-    position field is long (overflow-safe)
+    position is long (overflow-safe)
     write() guards against buffer overflow
-    flush on close() if dirty
+    flushes on close() when dirty
 end note
 
 note left of Disconnected
-  NfsSftpConfig holds:
-    host, port, user,
-    password (from env var)
+  NfsSftpConfig holds host, port, user,
+  and password loaded from env var.
 end note
 @enduml

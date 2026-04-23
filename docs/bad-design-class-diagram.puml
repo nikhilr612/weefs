@@ -1,195 +1,307 @@
-@startuml bad-design-class-diagram
-title WeeFsApp — Bad-Design Class Diagram (v2)
+@startuml
+title WeeFsApp — Bad Design Class Diagram
 
 skinparam classAttributeIconSize 0
-skinparam groupInheritance 2
 skinparam linetype ortho
-hide empty members
+skinparam packageStyle rectangle
 
-' ══════════════════════════════════════════════════════
-'  CORE — extractor
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  CORE · EXTRACTOR  (archive format handling — heavy concrete coupling)
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.core.extractor" {
-    interface IArchiveExtractor
-    class ArchiveExtractor implements IArchiveExtractor
-    class ExtZipFsProvider
-    class ExtZipFsIO
-    class ExtZipFileSystem
-    class ExtZipPath
-    class ExtZipDirectoryStream
-    class ArchiveFormatDetector
-    class ArchiveFormatInfo
-    enum ArchiveContainerType
 
-    package "compression" {
-        interface ICompressionStrategy
-        class CompressionStrategyFactory
-        class GzipCompressionStrategy implements ICompressionStrategy
-        class Bzip2CompressionStrategy implements ICompressionStrategy
-        class XzCompressionStrategy implements ICompressionStrategy
-        class LzmaCompressionStrategy implements ICompressionStrategy
-        class NoCompressionStrategy implements ICompressionStrategy
-    }
+  interface IArchiveExtractor {
+    +extract(Path, Path) : void
+    +listEntries(Path) : List<String>
+  }
+
+  class ArchiveExtractor {
+    -detector : ArchiveFormatDetector
+    +extract(Path, Path) : void
+    +listEntries(Path) : List<String>
+  }
+
+  class ExtZipFsProvider {
+    +getScheme() : String
+    +newFileSystem(URI, Map) : FileSystem
+    +getFileSystem(URI) : FileSystem
+  }
+
+  class ExtZipFileSystem {
+    -archivePath : Path
+    -entries : Map<String, byte[]>
+    +getPath(String, String...) : Path
+    +close() : void
+  }
+
+  class ArchiveFormatDetector {
+    +detect(Path) : ArchiveFormatInfo
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  CORE — filesystem (NEW in v2)
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  CORE · FILESYSTEM  (Factory with hardcoded drivers)
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.core.filesystem" {
-    interface FileSystemDriver <<BAD: DIP violation in impls>>
-    class FileSystemFactory <<BAD: OCP — hardcodes 3 drivers>>
-    class LocalFileSystemDriver implements FileSystemDriver
-    class NfsFileSystemDriver <<BAD: instantiates NfsSftpFsProvider directly>> implements FileSystemDriver
-    class ZipFileSystemDriver <<BAD: instantiates ExtZipFsProvider directly>> implements FileSystemDriver
+
+  interface FileSystemDriver {
+    +scheme() : String
+    +open(URI, Map) : FileSystem
+  }
+
+  class FileSystemFactory <<BAD: hardcodes drivers>> {
+    -drivers : Map<String, FileSystemDriver>
+    +FileSystemFactory()
+    -registerDefaults() : void
+    +open(URI, Map) : FileSystem
+  }
+
+  class LocalFileSystemDriver {
+    +scheme() : String
+    +open(URI, Map) : FileSystem
+  }
+
+  class NfsFileSystemDriver <<BAD: new NfsSftpFsProvider()>> {
+    +scheme() : String
+    +open(URI, Map) : FileSystem
+  }
+
+  class ZipFileSystemDriver <<BAD: new ExtZipFsProvider()>> {
+    +scheme() : String
+    +open(URI, Map) : FileSystem
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  CORE — NFS
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  CORE · NFS  (no connection pooling, session per op)
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.core.nfs" {
-    class NfsFsProvider
-    class NfsIO
-    class NfsConnectionConfig
-    class NfsFileInfo
 
-    class NfsSftpFsProvider <<BAD: no connection pooling>>
-    class NfsSftpFsIO <<BAD: new session per op — no pooling>>
-    class NfsSftpConfig
-    class NfsParsedUri
-    class NfsFileSystem <<BAD: dual-constructor; fragile option matching>>
-    class NfsPath <<BAD: hashCode mixes virtualPath/delegate>>
-    class NfsSyncingByteChannel <<BAD: position was int (fixed); still buffer-only>>
-    class NfsBasicFileAttributes
-    class NfsDirectoryStream
-    class NfsDirectoryIterator
-    class NfsPathIterator
+  class NfsConnectionConfig {
+    -host : String
+    -port : int
+    -exportPath : String
+    -mountPoint : String
+    -readOnly : boolean
+    +getHost() : String
+    +getPort() : int
+    +isReadOnly() : boolean
+  }
+
+  class NfsIO <<BAD: static utility bag>> {
+    +{static} writeFile(NfsConnectionConfig, String, byte[]) : void
+    +{static} readFile(NfsConnectionConfig, String) : byte[]
+    +{static} delete(NfsConnectionConfig, String) : void
+    +{static} rename(NfsConnectionConfig, String, String) : void
+    +{static} listDirectory(NfsConnectionConfig, String) : List<NfsFileInfo>
+  }
+
+  class NfsSftpFsProvider {
+    +getScheme() : String
+    +newFileSystem(URI, Map) : FileSystem
+  }
+
+  class NfsSftpFsIO <<BAD: new session per op>> {
+    -config : NfsSftpConfig
+    +withChannel(Consumer<ChannelSftp>) : void
+  }
+
+  class NfsFileSystem {
+    -provider : NfsSftpFsProvider
+    -config : NfsSftpConfig
+    +getPath(String, String...) : Path
+    +close() : void
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  UI — Model
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  UI · MODEL  (God object holding archive + NFS + UI state)
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.ui.model" {
-    class ArchiveModel <<BAD: god model — NFS+archive+UI state mixed>>
-    class FileNode
+
+  class ArchiveModel <<BAD: God object>> {
+    +{static} PROP_ARCHIVE_PATH : String
+    +{static} PROP_NFS_CONFIG : String
+    +{static} PROP_REMOTE_MOUNTED : String
+    +{static} PROP_READ_ONLY : String
+    +{static} PROP_SELECTED_FILE : String
+    -pcs : PropertyChangeSupport
+    -fileSystemFactory : FileSystemFactory
+    -archivePath : Path
+    -nfsConfig : NfsConnectionConfig
+    -fileSystem : FileSystem
+    -remoteMounted : boolean
+    -readOnly : boolean
+    -selectedFile : FileNode
+    +openArchive(Path, boolean) : void
+    +openMountUri(URI, boolean) : void
+    +closeArchive() : void
+    +setNfsConfig(NfsConnectionConfig) : void
+    +isNfsMounted() : boolean
+    +isRemoteMounted() : boolean
+    +listChildren(Path) : List<FileNode>
+    +readFileBytes(Path) : byte[]
+    +addPropertyChangeListener(PropertyChangeListener) : void
+  }
+
+  class FileNode {
+    -path : Path
+    -displayName : String
+    -directory : boolean
+    -size : long
+    +getPath() : Path
+    +isDirectory() : boolean
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  UI — Controller
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  UI · CONTROLLER  (leaky abstraction, duplicate state)
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.ui.controller" {
-    interface IArchiveController
-    interface INfsController <<BAD: still returns NfsFileOperations (concrete)>>
-    interface IFileOperations
-    class ArchiveController <<BAD: currentNfsConfig duplicates model state>>
-    class FileOperations implements IFileOperations
-    class NfsFileOperations <<BAD: showError(null) parent>> implements IFileOperations
+
+  interface IArchiveController {
+    +openArchive(File) : void
+    +closeArchive() : void
+    +extractSelected(Path) : void
+    +deleteSelected() : void
+  }
+
+  interface INfsController <<BAD: returns concrete NfsFileOperations>> {
+    +mountNfs(NfsConnectionConfig) : void
+    +unmountNfs() : void
+    +getNfsFileOps() : NfsFileOperations
+  }
+
+  interface IFileOperations {
+    +extractTo(Path, Path) : boolean
+    +delete(Path) : void
+    +rename(Path, String) : void
+  }
+
+  class ArchiveController <<BAD: currentNfsConfig duplicates model>> {
+    -model : ArchiveModel
+    -currentNfsConfig : NfsConnectionConfig
+    -fileOps : FileOperations
+    -nfsFileOps : NfsFileOperations
+    +openArchive(File) : void
+    +closeArchive() : void
+    +mountNfs(NfsConnectionConfig) : void
+    +unmountNfs() : void
+    +isNfsMounted() : boolean
+    +extractSelected(Path) : void
+    +deleteSelected() : void
+  }
+
+  class FileOperations {
+    -model : ArchiveModel
+    +extractTo(Path, Path) : boolean
+    +delete(Path) : void
+    +rename(Path, String) : void
+  }
+
+  class NfsFileOperations <<BAD: showError(null) parent>> {
+    -config : NfsConnectionConfig
+    +setConfig(NfsConnectionConfig) : void
+    +extractTo(Path, Path) : boolean
+    +delete(Path) : void
+    +rename(Path, String) : void
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  UI — View
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  UI · VIEW
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.ui.view" {
-    class MainFrame
-    class MenuBarFactory <<BAD: was casting without guard (fixed)>>
-    class ToolBarFactory
+
+  class MainFrame {
+    -model : ArchiveModel
+    -controller : IArchiveController
+    +buildUI() : void
+    -handleExit() : void
+  }
+
+  class MenuBarFactory <<BAD: unchecked casts>> {
+    +{static} build(ArchiveModel, IArchiveController, INfsController) : JMenuBar
+  }
+
+  class ToolBarFactory {
+    +{static} build(ArchiveModel, IArchiveController, INfsController) : JToolBar
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  UI — App
-' ══════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════════════
+'  UI · APP
+' ═══════════════════════════════════════════════════════════════════════
 package "io.wfs.ui" {
-    class WeeFsApp <<Singleton — not injected>>
+  class WeeFsApp <<Singleton — not injected>> {
+    -model : ArchiveModel
+    -controller : ArchiveController
+    +{static} main(String[]) : void
+  }
 }
 
-' ══════════════════════════════════════════════════════
-'  RELATIONSHIPS
-' ══════════════════════════════════════════════════════
+' ─── Relationships ──────────────────────────────────────────────────────
+IArchiveExtractor <|.. ArchiveExtractor
+FileSystemDriver <|.. LocalFileSystemDriver
+FileSystemDriver <|.. NfsFileSystemDriver
+FileSystemDriver <|.. ZipFileSystemDriver
+IArchiveController <|.. ArchiveController
+INfsController     <|.. ArchiveController
+IFileOperations    <|.. FileOperations
+IFileOperations    <|.. NfsFileOperations
+
+FileSystemFactory --> FileSystemDriver
+NfsFileSystemDriver --> NfsSftpFsProvider
+ZipFileSystemDriver --> ExtZipFsProvider
+
 ArchiveModel --> FileSystemFactory
 ArchiveModel --> NfsConnectionConfig
 ArchiveModel --> FileNode
 ArchiveModel --> NfsIO
+ArchiveModel --> "FileSystem" ExtZipFileSystem
+ArchiveModel --> "FileSystem" NfsFileSystem
 
-FileSystemFactory --> FileSystemDriver
-FileSystemFactory --> LocalFileSystemDriver
-FileSystemFactory --> NfsFileSystemDriver
-FileSystemFactory --> ZipFileSystemDriver
-
-NfsFileSystemDriver --> NfsSftpFsProvider
-ZipFileSystemDriver --> ExtZipFsProvider
-
-NfsSftpFsProvider --> NfsFileSystem
-NfsSftpFsProvider --> NfsSftpConfig
-NfsSftpFsProvider --> NfsParsedUri
-NfsSftpFsProvider --> NfsSftpFsIO
-NfsSftpFsIO --> NfsSftpConfig
-
-NfsFileSystem --> NfsPath
-NfsFileSystem --> NfsSftpConfig
-NfsFileSystem --> NfsConnectionConfig
-NfsFileSystem --> NfsSftpFsProvider
-NfsSyncingByteChannel --> NfsFileSystem
-NfsDirectoryStream --> NfsDirectoryIterator
-NfsDirectoryIterator --> NfsBasicFileAttributes
-NfsPath --> NfsPathIterator
-
-ArchiveController ..|> IArchiveController
-ArchiveController ..|> INfsController
 ArchiveController --> ArchiveModel
 ArchiveController --> FileOperations
 ArchiveController --> NfsFileOperations
-ArchiveController --> NfsConnectionConfig : currentNfsConfig\n<<duplicates model state>>
+ArchiveController --> NfsConnectionConfig : currentNfsConfig\n(duplicate state)
 
-FileOperations --> ArchiveModel
-NfsFileOperations --> ArchiveModel
+FileOperations    --> ArchiveModel
 NfsFileOperations --> NfsConnectionConfig
+
+NfsSftpFsProvider --> NfsFileSystem
+NfsSftpFsProvider --> NfsSftpFsIO
+ArchiveExtractor  --> ArchiveFormatDetector
+ExtZipFsProvider  --> ExtZipFileSystem
 
 WeeFsApp --> ArchiveModel
 WeeFsApp --> ArchiveController
 
-MainFrame --> ArchiveModel
-MainFrame --> IArchiveController
-
-MenuBarFactory --> IArchiveController
-MenuBarFactory --> INfsController
-MenuBarFactory --> ArchiveModel
-
-ToolBarFactory --> IArchiveController
-ToolBarFactory --> INfsController
-ToolBarFactory --> ArchiveModel
-
-ExtZipFsProvider --> ExtZipFileSystem
-ExtZipFileSystem --> ExtZipPath
-ExtZipFileSystem --> ExtZipDirectoryStream
-ArchiveFormatDetector --> ArchiveFormatInfo
-ArchiveFormatInfo --> ArchiveContainerType
-ExtZipFsIO --> ICompressionStrategy
-CompressionStrategyFactory --> ICompressionStrategy
+MainFrame       --> ArchiveModel
+MainFrame       --> IArchiveController
+MenuBarFactory  --> IArchiveController
+MenuBarFactory  --> INfsController
+ToolBarFactory  --> IArchiveController
+ToolBarFactory  --> INfsController
 
 note top of ArchiveModel
-  BAD DESIGNS:
-  • God object — archive + NFS + UI state in one class
-  • listChildren() branches on isNfsMounted() instead of polymorphism
-  • Legacy NfsIO path still embedded
-end note
-
-note top of ArchiveController
-  BAD DESIGNS:
-  • currentNfsConfig duplicates model's mount state
-  • isNfsMounted() originally checked only currentNfsConfig (fixed)
-  • Large controller — mixes archive + NFS + file ops
+  God object:
+   • archive + NFS + UI state in one class
+   • listChildren branches on isNfsMounted
+   • embeds legacy NfsIO calls
 end note
 
 note top of FileSystemFactory
-  BAD DESIGNS:
-  • registerDefaults() hardcodes 3 drivers
-  • Adding a new driver requires editing factory (OCP violation)
+  OCP violation:
+   registerDefaults() hardcodes the
+   three known drivers. Adding a new
+   scheme requires editing the factory.
 end note
 
-note top of NfsSftpFsIO
-  BAD DESIGNS:
-  • withChannel() opens a new SSH session per operation
-  • listDirectory() makes 2 separate channel calls
-  • No connection pooling
+note bottom of NfsSftpFsIO
+  No connection pooling.
+  Every operation opens a new
+  SSH session and channel.
 end note
 
 @enduml

@@ -1,50 +1,68 @@
-@startuml activity-diagram-nfs-operations
-title NFS / SFTP File Operations — Extract, Copy, Delete
+@startuml
+title NFS / SFTP File Operations (extract · copy · delete · paste)
 
 start
 
-:User selects file(s) in NFS tree
-and triggers operation
-(extract, copy, delete);
+:User selects node(s) in the tree
+and triggers an operation;
 
 :ArchiveController dispatches
-to appropriate method;
+extractSelected or deleteSelected or
+copySelected or cutSelected or pasteSelected;
 
-if (isRemoteMounted()?) then (no)
-    :Show "No remote mounted" error\nvia UIUtils.showError();
-    stop
+if (action is copy or cut?) then (yes)
+  :record selected FileNode +
+  sourceSessionId in ClipboardEntry;
+  stop
 endif
 
-if (Operation?) then (extractNfsSelected)
-    :Determine mount type;
-    if (model.isRemoteMounted()?) then (SFTP)
-        :fileOps = getNfsFileOps()\nreturns IFileOperations (DIP);
-        :NfsFileOperations.requireConfig()\nthrows if config null (DRY);
-        :Iterate selected NfsPath entries;
-        :NfsFileOperations.copyFile(\n  remotePath, localDestination);
-        :NfsSftpFsProvider.get(config, path)\nstreams bytes via NfsSyncingByteChannel;
-        :Write to local destination via FileUtils;
-    else (legacy NFS)
-        :NfsIO.downloadFile(config, path, dest);
-    endif
-else if (Operation == copyFile) then (yes)
-    :NfsFileOperations.requireConfig();
-    :NfsSftpFsProvider.get(config, src);
-    :NfsSftpFsProvider.put(config, dest, stream);
-else if (Operation == deleteFile) then (yes)
-    :NfsFileOperations.requireConfig();
-    :NfsSftpFsProvider.delete(config, path);
-    :If directory: FileUtils.deleteRecursively(path)\n(DRY: single implementation);
-else (moveFile)
-    :NfsFileOperations.requireConfig();
-    :copyFile then deleteFile;
+:Resolve active session's FileOperations:
+getFileOps() →
+  if session is NFS → NfsFileOperations(config)
+  else → FileOperations;
+note right
+  Both implement IFileOperations.
+  ArchiveController depends on the
+  interface, not the concrete class (DIP).
+end note
+
+if (operation) then (extract)
+  :IFileOperations.extractTo(src, dest);
+  if (source is NFS?) then (yes)
+    :NfsSftpFsProvider.get(config, src)
+    streams bytes via
+    NfsSyncingByteChannel;
+    :write to local dest via FileUtils;
+  else (no)
+    :Files.copy / walk + copy
+    across FileSystem boundaries;
+  endif
+
+else if (delete) then (yes)
+  :IFileOperations.delete(path);
+  if (directory?) then (yes)
+    :FileUtils.deleteRecursively(path);
+  endif
+
+else if (paste) then (yes)
+  :resolve ClipboardEntry.sourceSessionId;
+  :read bytes via that session;
+  :write bytes into active session's
+  target directory;
+  if (was cut?) then (yes)
+    :delete source;
+  endif
+
+else (rename)
+  :IFileOperations.rename(path, newName);
 endif
 
-if (Operation succeeded?) then (yes)
-    :Refresh NFS directory listing;
-    :Update ArchiveTreePanel;
+if (success?) then (yes)
+  :ArchiveModel.fireTreeRefresh();
+  :ArchiveTreePanel repaints affected
+  session root(s);
 else (no)
-    :UIUtils.showError(parent, msg, ex)\n(DRY: single error dialog);
+  :UIUtils.showError(parent, msg, ex);
 endif
 
 stop

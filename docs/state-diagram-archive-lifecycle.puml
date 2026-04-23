@@ -1,45 +1,48 @@
-@startuml state-diagram-archive-lifecycle
-title Archive & Remote Mount Lifecycle
+@startuml
+title MountSession Lifecycle (good-design, multi-session)
 
-[*] --> Idle : App starts
+[*] --> AppIdle : App starts
 
-state Idle {
-    [*] --> NoArchive
+state AppIdle {
+  [*] --> NoSessions
+  NoSessions : sessions.isEmpty() == true\nPROP_OPEN = false
 }
 
-state ArchiveOpen {
-    [*] --> Browsing
-    Browsing --> Extracting : extractSelected()
-    Extracting --> Browsing : extraction complete
+state HasSessions {
+  [*] --> Active
+  state Active {
+    Browsing   : list children of activeSession.rootPath
+    Extracting : IFileOperations.extractTo(src, dest)
+    Saving     : closeSession + reopen (ZIP flush)
+
+    Browsing   --> Extracting : extractSelected()
+    Extracting --> Browsing   : success / error
+    Browsing   --> Saving     : saveSession(id)
+    Saving     --> Browsing   : reopened
+  }
+
+  Active : activeSession != null\nPROP_ARCHIVE_PATH fired on switch
 }
 
-state RemoteMounted {
-    [*] --> RemoteBrowsing
-    RemoteBrowsing --> RemoteExtracting : extractNfsSelected()
-    RemoteExtracting --> RemoteBrowsing : extraction complete
-}
+NoSessions  --> HasSessions  : openArchive(File) /\n openMountUri(URI) /\n mountNfs(config)\nPROP_SESSION_ADDED
+HasSessions --> HasSessions  : setActiveSession(id)\nPROP_ARCHIVE_PATH
+HasSessions --> HasSessions  : openArchive() ... (adds session)\nPROP_SESSION_ADDED
+HasSessions --> HasSessions  : closeSession(id)\nPROP_SESSION_REMOVED\n[sessions still non-empty]
+HasSessions --> NoSessions   : closeSession(id)\nPROP_SESSION_REMOVED\n[last session removed]\nPROP_OPEN = false
 
-NoArchive --> ArchiveOpen   : openArchive(File)\n[xzip:// URI routed via FileSystemFactory]
-ArchiveOpen --> NoArchive   : closeArchive()\nPROP_ARCHIVE_PATH fired
+AppIdle --> [*] : App exits\n(closeArchive flushes all)
 
-NoArchive --> RemoteMounted : mountNfs() / openMountUri(URI)\n[weefs:// URI routed via FileSystemFactory]\nPROP_REMOTE_MOUNTED fired
-ArchiveOpen --> RemoteMounted : mountNfs()\n(archive stays open)
-
-RemoteMounted --> NoArchive      : unmountNfs()\n[SFTP: closeArchive()]\nPROP_REMOTE_MOUNTED cleared
-RemoteMounted --> ArchiveOpen    : unmountNfs()\n[legacy NFS: disconnects only]
-
-ArchiveOpen --> [*]   : App exits
-RemoteMounted --> [*] : App exits (connection closed)
-NoArchive --> [*]     : App exits
-
-note right of RemoteMounted
-  ArchiveModel.isRemoteMounted() == true
-  fires PROP_REMOTE_MOUNTED
-  MenuBarFactory enables unmount/extract menus
+note right of HasSessions
+  ArchiveModel holds a List<MountSession>.
+  Opening another archive / directory / remote
+  ADDS a new session rather than replacing.
+  Each session owns its own FileSystem.
 end note
 
-note right of ArchiveOpen
-  FileSystemFactory.open(xzip://...) returns
-  ExtZipFileSystem via ZipFileSystemDriver
+note left of Active
+  Writable ZIP sessions are flushed
+  on close (isSaveable() == true).
+  Directory, NFS and weefs:// mounts
+  are write-through.
 end note
 @enduml
