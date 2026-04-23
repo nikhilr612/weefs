@@ -40,6 +40,29 @@ flatlaf_version := "3.5.4"
 flatlaf_jar     := "lib/flatlaf-" + flatlaf_version + ".jar"
 flatlaf_url     := "https://repo1.maven.org/maven2/com/formdev/flatlaf/" + flatlaf_version + "/flatlaf-" + flatlaf_version + ".jar"
 
+spring_boot_version := "2.7.18"
+spring_boot_jar     := "lib/spring-boot-" + spring_boot_version + ".jar"
+spring_boot_url     := "https://repo1.maven.org/maven2/org/springframework/boot/spring-boot/" + spring_boot_version + "/spring-boot-" + spring_boot_version + ".jar"
+
+spring_version := "5.3.31"
+spring_context_jar     := "lib/spring-context-" + spring_version + ".jar"
+spring_context_url     := "https://repo1.maven.org/maven2/org/springframework/spring-context/" + spring_version + "/spring-context-" + spring_version + ".jar"
+
+spring_core_jar     := "lib/spring-core-" + spring_version + ".jar"
+spring_core_url     := "https://repo1.maven.org/maven2/org/springframework/spring-core/" + spring_version + "/spring-core-" + spring_version + ".jar"
+
+spring_beans_jar     := "lib/spring-beans-" + spring_version + ".jar"
+spring_beans_url     := "https://repo1.maven.org/maven2/org/springframework/spring-beans/" + spring_version + "/spring-beans-" + spring_version + ".jar"
+
+spring_expression_jar     := "lib/spring-expression-" + spring_version + ".jar"
+spring_expression_url     := "https://repo1.maven.org/maven2/org/springframework/spring-expression/" + spring_version + "/spring-expression-" + spring_version + ".jar"
+
+spring_aop_jar     := "lib/spring-aop-" + spring_version + ".jar"
+spring_aop_url     := "https://repo1.maven.org/maven2/org/springframework/spring-aop/" + spring_version + "/spring-aop-" + spring_version + ".jar"
+
+spring_jcl_jar     := "lib/spring-jcl-" + spring_version + ".jar"
+spring_jcl_url     := "https://repo1.maven.org/maven2/org/springframework/spring-jcl/" + spring_version + "/spring-jcl-" + spring_version + ".jar"
+
 # Download jtar from Maven Central if it is not already present
 deps:
 	mkdir -p lib
@@ -54,11 +77,20 @@ deps:
 	[ -f "{{slf4j_api_jar}}" ]    || curl -fsSL -o "{{slf4j_api_jar}}"    "{{slf4j_api_url}}"
 	[ -f "{{slf4j_simple_jar}}" ] || curl -fsSL -o "{{slf4j_simple_jar}}" "{{slf4j_simple_url}}"
 	[ -f "{{flatlaf_jar}}" ] || curl -fsSL -o "{{flatlaf_jar}}" "{{flatlaf_url}}"
+	[ -f "{{spring_boot_jar}}" ] || curl -fsSL -o "{{spring_boot_jar}}" "{{spring_boot_url}}"
+	[ -f "{{spring_context_jar}}" ] || curl -fsSL -o "{{spring_context_jar}}" "{{spring_context_url}}"
+	[ -f "{{spring_core_jar}}" ] || curl -fsSL -o "{{spring_core_jar}}" "{{spring_core_url}}"
+	[ -f "{{spring_beans_jar}}" ] || curl -fsSL -o "{{spring_beans_jar}}" "{{spring_beans_url}}"
+	[ -f "{{spring_expression_jar}}" ] || curl -fsSL -o "{{spring_expression_jar}}" "{{spring_expression_url}}"
+	[ -f "{{spring_aop_jar}}" ] || curl -fsSL -o "{{spring_aop_jar}}" "{{spring_aop_url}}"
+	[ -f "{{spring_jcl_jar}}" ] || curl -fsSL -o "{{spring_jcl_jar}}" "{{spring_jcl_url}}"
 
 build: deps
-	rm -f bin/artifact.jar
+	rm -rf bin
+	mkdir -p bin
 	javac -cp "lib/*" -d bin $(find src -type f -name "*.java")
 	cd bin && find ../lib -type f -name "*.jar" -exec jar xf {} \;
+	rm -f bin/module-info.class
 	jar cvfm bin/artifact.jar MANIFEST.MF -C bin .
 run:
 	java -jar bin/artifact.jar integration
