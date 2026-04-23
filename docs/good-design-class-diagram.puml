@@ -1,6 +1,7 @@
 @startuml
+title WeeFsApp — Good Design Class Diagram
+
 skinparam classAttributeIconSize 0
-title Good Design — full class diagram (all classes, relationships)
 skinparam linetype ortho
 hide empty members
 

@@ -1,167 +1,482 @@
-@startuml
-title weefs — UI Module
+@startuml ui-class-diagram
+title weefs — UI Module (MVC: View + Controller + Model + Util)
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
+left to right direction
 
-package "ui.view" {
-  class MainFrame {
+' =====================================================
+' External JDK / 3rd-party classes (shown as boundary)
+' =====================================================
+package "javax.swing (JDK)" <<External>> {
+  class JFrame
+  class JPanel
+  class JDialog
+  class JTree
+  class "DefaultTreeCellRenderer" as DefaultTreeCellRenderer
+  class "DefaultMutableTreeNode" as DefaultMutableTreeNode
+  class "DefaultTreeModel" as DefaultTreeModel
+  class SwingUtilities
+}
+package "java.beans (JDK)" <<External>> {
+  class PropertyChangeSupport
+  interface PropertyChangeListener
+}
+package "com.formdev.flatlaf" <<External>> {
+  class FlatLightLaf
+  class FlatDarkLaf
+}
+package "io.wfs.core (bridge)" <<External>> {
+  class NfsConnectionConfig
+  class NfsIO
+  class FileSystemFactory
+}
+
+' =====================================================
+' io.wfs.ui (entry points)
+' =====================================================
+package "io.wfs.ui" {
+  class MainLauncher {
+    +{static} main(args : String[]) : void
+  }
+
+  class WeeFsApp <<Singleton>> {
+    -{static} instance : WeeFsApp
     -model : ArchiveModel
     -controller : ArchiveController
-    -treePanel : ArchiveTreePanel
-    -contentPanel : FileContentPanel
-    -statusBar : StatusBarPanel
-    +MainFrame(model : ArchiveModel, controller : ArchiveController)
-    -handleExit() : void
+    -mainFrame : MainFrame
+    -WeeFsApp()
+    +{static} getInstance() : WeeFsApp
+    +getModel() : ArchiveModel
+    +getController() : ArchiveController
+    +launch() : void
+    +{static} start() : void
   }
-  class ArchiveTreePanel {
-    -model : ArchiveModel
-    -controller : ArchiveController
-    -tree : JTree
-    -treeModel : DefaultTreeModel
-    +refresh() : void
-    -confirmAndClose(sessionId : String) : void
-    -showContextMenu(evt : MouseEvent) : void
-  }
-  class FileContentPanel {
-    -textArea : JTextArea
-    -hexView : JTextArea
-    +showFile(node : FileNode) : void
-  }
-  class StatusBarPanel {
-    -statusLabel : JLabel
-    -pathLabel : JLabel
-    +setStatus(text : String) : void
-  }
-  class ToolBarFactory {
-    +{static} build(controller : ArchiveController, model : ArchiveModel) : JToolBar
-  }
-  class MenuBarFactory {
-    +{static} build(frame : JFrame, controller : ArchiveController, model : ArchiveModel) : JMenuBar
-  }
-  class FileTreeCellRenderer {
-    +getTreeCellRendererComponent(...) : Component
-  }
-  package "ui.view.dialog" {
-    class AboutDialog
-    class PropertiesDialog
+
+  class UiIntegrationTest {
+    -UiIntegrationTest()
+    +{static} main(args : String[]) : void
+    +{static} run() : void
+    -{static} testOpenFiresEventsOnEdt() : void
+    -{static} testOpenFiresCorrectReadOnlyTransition() : void
+    -{static} testCloseNopWhenAlreadyClosed() : void
+    -{static} testCloseFiresEventsOnEdt() : void
+    -{static} testSaveArchiveReopens() : void
+    -{static} testFileOperationsRoundTrip() : void
+    -{static} testCopyRejectsDirectory() : void
+    -{static} testPropertyChangesOldNewValues() : void
   }
 }
 
-package "ui.controller" {
-  interface IArchiveController {
-    +openArchive(path : Path) : void
-    +openDirectory(path : Path) : void
-    +saveSession(id : String) : void
-    +closeSession(id : String) : void
-    +extractSelected(dest : Path) : void
-    +copySelected() : void
-    +cutSelected() : void
-    +pasteSelected() : void
-    +hasClipboard() : boolean
-  }
-  interface INfsController {
-    +mountNfs(config : NfsConnectionConfig) : void
-    +unmountNfs() : void
-    +getFileOps() : IFileOperations
-  }
-  interface IFileOperations {
-    +extractTo(src : FileNode, dest : Path) : void
-    +delete(path : Path) : void
-    +rename(path : Path, newName : String) : void
-    +createFile(parent : Path, name : String) : void
-    +createDirectory(parent : Path, name : String) : void
-    +copy(src : Path, dest : Path) : void
-    +saveFile(path : Path, bytes : byte[]) : void
-  }
-  class ArchiveController {
-    -model : ArchiveModel
-    -fileOps : FileOperations
-    -nfsFileOps : NfsFileOperations
-    -clipboard : ClipboardEntry
-    +getFileOps() : IFileOperations
-  }
-  class FileOperations
-  class NfsFileOperations {
-    -model : ArchiveModel
-    +setConfig(config : NfsConnectionConfig) : void
-    +getConfig() : NfsConnectionConfig
-  }
-  class NfsConnectionDialog
-  IArchiveController <|.. ArchiveController
-  INfsController   <|.. ArchiveController
-  IFileOperations  <|.. FileOperations
-  IFileOperations  <|.. NfsFileOperations
-}
-
-package "ui.model" {
+' =====================================================
+' io.wfs.ui.model
+' =====================================================
+package "io.wfs.ui.model" {
   class ArchiveModel {
+    +{static} PROP_ARCHIVE_PATH : String
+    +{static} PROP_NFS_CONFIG : String
+    +{static} PROP_OPEN : String
+    +{static} PROP_READ_ONLY : String
+    +{static} PROP_REMOTE_MOUNTED : String
+    +{static} PROP_SELECTED_FILE : String
+    +{static} PROP_TREE_REFRESH : String
+    +{static} PROP_SESSION_ADDED : String
+    +{static} PROP_SESSION_REMOVED : String
+    -pcs : PropertyChangeSupport
+    -fileSystemFactory : FileSystemFactory
     -sessions : List<MountSession>
     -activeSession : MountSession
     -selectedFile : FileNode
-    -pcs : PropertyChangeSupport
-    +addSession(s : MountSession) : void
-    +closeSession(id : String) : void
-    +setActiveSession(id : String) : void
+    +addPropertyChangeListener(l : PropertyChangeListener) : void
     +getSessions() : List<MountSession>
-    +findSessionForPath(p : Path) : MountSession
+    +getActiveSession() : MountSession
+    +getSession(id : String) : MountSession
+    +setActiveSession(id : String) : void
+    +closeSession(id : String) : void
+    +openDirectory(dir : Path, readOnly : boolean) : void
+    +openArchive(archive : Path, readOnly : boolean) : void
+    +openMountUri(uri : URI, readOnly : boolean) : void
+    +createArchive(archive : Path) : void
+    +setNfsConfig(config : NfsConnectionConfig) : void
+    +closeArchive() : void
+    +isOpen() : boolean
+    +isReadOnly() : boolean
+    +isRemoteMounted() : boolean
+    +isNfsMounted() : boolean
+    +getArchivePath() : Path
+    +getFileSystem() : FileSystem
+    +getRootPath() : Path
+    +listChildren(directory : Path) : List<FileNode>
+    +listChildrenForSession(id : String, dir : Path) : List<FileNode>
+    +readFileContent(path : Path) : String
+    +readFileBytes(path : Path) : byte[]
+    +getSelectedFile() : FileNode
+    +setSelectedFile(node : FileNode) : void
+    +fireTreeRefresh() : void
   }
-  class MountSession {
-    -id : String
-    -fileSystem : FileSystem
-    -displayPath : Path
-    -readOnly : boolean
-    -remoteMounted : boolean
-    -nfsConfig : NfsConnectionConfig
-    +isSaveable() : boolean
-    +close() : void
-  }
+
   class FileNode {
     -path : Path
-    -name : String
+    -displayName : String
     -directory : boolean
+    -size : long
+    +FileNode(path : Path)
+    +FileNode(path : Path, displayName : String, directory : boolean)
+    +getPath() : Path
+    +getDisplayName() : String
+    +isDirectory() : boolean
+    +getSize() : long
+    +getExtension() : String
     +compareTo(other : FileNode) : int
   }
+
+  class MountSession <<value>> {
+    -id : String
+    -label : String
+    ~fileSystem : FileSystem
+    ~directoryRoot : Path
+    ~remoteMounted : boolean
+    ~readOnly : boolean
+    ~displayPath : Path
+    ~nfsConfig : NfsConnectionConfig
+    ~MountSession(label : String, fs : FileSystem, dirRoot : Path, display : Path, ro : boolean, remote : boolean)
+    ~MountSession(label : String, cfg : NfsConnectionConfig)
+    +getId() : String
+    +getLabel() : String
+    +isReadOnly() : boolean
+    +isNfsMounted() : boolean
+    +isRemoteMounted() : boolean
+    +isSaveable() : boolean
+    +getDisplayPath() : Path
+    +getNfsConfig() : NfsConnectionConfig
+    +getRootPath() : Path
+    ~isSessionOpen() : boolean
+    ~close() : void
+  }
+
   class RemoteMountManager {
-    -model : ArchiveModel
+    +{static} PROP_NFS_CONFIG : String
+    -pcs : PropertyChangeSupport
+    -nfsConfig : NfsConnectionConfig
     +setNfsConfig(cfg : NfsConnectionConfig) : void
     +getNfsConfig() : NfsConnectionConfig
     +isNfsMounted() : boolean
   }
-  class ClipboardEntry {
-    -sourceSessionId : String
-    -node : FileNode
-    -cut : boolean
+
+  FileNode ..|> Comparable
+}
+
+' =====================================================
+' io.wfs.ui.controller
+' =====================================================
+package "io.wfs.ui.controller" {
+  interface IArchiveController {
+    +setParentComponent(parent : Component) : void
+    +getModel() : ArchiveModel
+    +getFileOps() : IFileOperations
+    +openDirectory() : void
+    +openArchive() : void
+    +mountNfs() : void
+    +createArchive() : void
+    +copySelected() : void
+    +cutSelected() : void
+    +pasteSelected() : void
+    +hasClipboard() : boolean
+    +closeSession(id : String) : void
+    +saveSession(id : String) : void
+    +closeArchive() : void
+    +saveArchive() : void
+    +newFile() : void
+    +newDirectory() : void
+    +deleteSelected() : void
+    +renameSelected() : void
+    +extractSelected() : void
+    +saveFileContent(path : Path, content : String) : void
   }
-  ArchiveModel "1" o-- "*" MountSession
-  ArchiveModel --> RemoteMountManager
-  ArchiveModel ..> ClipboardEntry
+
+  interface INfsController {
+    +getNfsFileOps() : IFileOperations
+    +mountNfs() : void
+    +unmountNfs() : void
+    +extractNfsSelected() : void
+    +isNfsMounted() : boolean
+  }
+
+  interface IFileOperations {
+    +createFile(path : Path, content : String) : boolean
+    +createDirectory(path : Path) : boolean
+    +delete(path : Path) : boolean
+    +rename(oldPath : Path, newPath : Path) : boolean
+    +saveFile(path : Path, content : String) : boolean
+    +extractTo(source : Path, dest : Path) : boolean
+    +copy(source : Path, targetDir : Path) : boolean
+  }
+
+  class ArchiveController {
+    -{static} ARCHIVE_FORMAT_OPTIONS : ArchiveFormatOption[]
+    -model : ArchiveModel
+    -fileOps : FileOperations
+    -nfsFileOps : NfsFileOperations
+    -parentComponent : Component
+    -clipboard : ClipboardEntry
+    +ArchiveController(model : ArchiveModel)
+    +unmountNfs() : void
+    +extractNfsSelected() : void
+    +isNfsMounted() : boolean
+  }
+  class ArchiveFormatOption <<record>>
+  class ClipboardEntry <<record>>
+  ArchiveController +-- ArchiveFormatOption
+  ArchiveController +-- ClipboardEntry
+
+  class FileOperations {
+    -model : ArchiveModel
+    +FileOperations(model : ArchiveModel)
+    +delete(node : FileNode) : boolean
+  }
+
+  class NfsFileOperations {
+    -model : ArchiveModel
+    -config : NfsConnectionConfig
+    +NfsFileOperations(model : ArchiveModel)
+    +setConfig(cfg : NfsConnectionConfig) : void
+    +getConfig() : NfsConnectionConfig
+  }
+
+  class NfsConnectionDialog {
+    -hostField : JTextField
+    -portSpinner : JSpinner
+    -exportPathField : JTextField
+    -mountPathField : JTextField
+    -timeoutSpinner : JSpinner
+    -readOnlyCheckbox : JCheckBox
+    -result : NfsConnectionConfig
+    +NfsConnectionDialog(parent : Component)
+    +showDialog() : NfsConnectionConfig
+    -initUI() : void
+  }
+
+  ArchiveController ..|> IArchiveController
+  ArchiveController ..|> INfsController
+  FileOperations ..|> IFileOperations
+  NfsFileOperations ..|> IFileOperations
+  NfsConnectionDialog --|> JDialog
 }
 
-package "ui.util" {
-  class IconFactory
-  class FileTypeDetector
-  class SwingUtils
-  class UIUtils
+' =====================================================
+' io.wfs.ui.view
+' =====================================================
+package "io.wfs.ui.view" {
+  class MainFrame {
+    -{static} TITLE : String
+    -{static} DEFAULT_WIDTH : int
+    -{static} DEFAULT_HEIGHT : int
+    -model : ArchiveModel
+    -controller : IArchiveController
+    +MainFrame(model : ArchiveModel, controller : IArchiveController)
+    -initUI() : void
+    -registerCloseHandler() : void
+  }
+
+  class ArchiveTreePanel {
+    -{static} CLOSE_BTN_WIDTH : int
+    -model : ArchiveModel
+    -controller : IArchiveController
+    -tree : JTree
+    -treeModel : DefaultTreeModel
+    -hiddenRoot : DefaultMutableTreeNode
+    -sessionNodes : Map<String, DefaultMutableTreeNode>
+    -hoveredRow : int
+    +ArchiveTreePanel(model : ArchiveModel, controller : IArchiveController)
+  }
+  class SessionNodeData
+  ArchiveTreePanel +-- SessionNodeData
+
+  class FileContentPanel {
+    -cardLayout : CardLayout
+    -textArea : JTextArea
+    -hexArea : JTextArea
+    -imageLabel : JLabel
+    -directoryLabel : JLabel
+    -emptyLabel : JLabel
+    -saveButton : JButton
+    -fileNameLabel : JLabel
+    -currentFilePath : Path
+    +FileContentPanel(model : ArchiveModel, controller : IArchiveController)
+  }
+
+  class StatusBarPanel {
+    -archiveLabel : JLabel
+    -fileInfoLabel : JLabel
+    -modeLabel : JLabel
+    -currentReadOnly : boolean
+    +StatusBarPanel(model : ArchiveModel)
+    +updateUI() : void
+    -updateModeLabel(ro : boolean) : void
+    -onModelChange(evt : PropertyChangeEvent) : void
+  }
+
+  class FileTreeCellRenderer {
+    -folderIcon : Icon
+    -folderOpenIcon : Icon
+    -textIcon : Icon
+    -imageIcon : Icon
+    -binaryIcon : Icon
+    -genericFileIcon : Icon
+    -archiveRootIcon : Icon
+    +getTreeCellRendererComponent(tree : JTree, value : Object, sel : boolean, expanded : boolean, leaf : boolean, row : int, hasFocus : boolean) : Component
+    -chooseIcon(node : FileNode, expanded : boolean) : Icon
+  }
+
+  class MenuBarFactory <<Factory>> {
+    -MenuBarFactory()
+    +{static} create(ctrl : IArchiveController, model : ArchiveModel) : JMenuBar
+  }
+
+  class ToolBarFactory <<Factory>> {
+    -ToolBarFactory()
+    +{static} create(ctrl : IArchiveController, model : ArchiveModel) : JToolBar
+  }
+
+  MainFrame --|> JFrame
+  ArchiveTreePanel --|> JPanel
+  FileContentPanel --|> JPanel
+  StatusBarPanel --|> JPanel
+  FileTreeCellRenderer --|> DefaultTreeCellRenderer
 }
 
-' Wiring
-MainFrame --> ArchiveTreePanel
-MainFrame --> FileContentPanel
-MainFrame --> StatusBarPanel
-MainFrame --> ArchiveController
-MainFrame --> ArchiveModel
+package "io.wfs.ui.view.dialog" {
+  class AboutDialog {
+    +AboutDialog(owner : Frame)
+    -initUI() : void
+  }
+  class PropertiesDialog {
+    +PropertiesDialog(owner : Frame, fileName : String, path : String, type : String, size : String, isDirectory : boolean)
+    -initUI(fileName : String, path : String, type : String, size : String, isDirectory : boolean) : void
+  }
+  AboutDialog --|> JDialog
+  PropertiesDialog --|> JDialog
+}
+
+' =====================================================
+' io.wfs.ui.util
+' =====================================================
+package "io.wfs.ui.util" {
+  class FileTypeDetector {
+    -{static} TEXT_EXTENSIONS : Set<String>
+    -{static} IMAGE_EXTENSIONS : Set<String>
+    -{static} BINARY_EXTENSIONS : Set<String>
+    +{static} detect(extension : String) : FileType
+    +{static} getMimeDescription(extension : String) : String
+  }
+  enum FileType {
+    TEXT
+    IMAGE
+    BINARY
+    DIRECTORY
+    UNKNOWN
+  }
+  FileTypeDetector +-- FileType
+
+  class IconFactory <<Factory>> {
+    -{static} ICON_SIZE : int
+    +{static} folderIcon() : Icon
+    +{static} folderOpenIcon() : Icon
+    +{static} fileIcon() : Icon
+    +{static} textFileIcon() : Icon
+    +{static} imageFileIcon() : Icon
+    +{static} binaryFileIcon() : Icon
+    +{static} archiveIcon() : Icon
+  }
+  class PaintedIcon
+  IconFactory +-- PaintedIcon
+
+  class SwingUtils {
+    +{static} setSystemLookAndFeel() : void
+    +{static} isDarkTheme() : boolean
+    +{static} toggleTheme() : void
+    -{static} applyUiCustomisations() : void
+    +{static} formatFileSize(bytes : long) : String
+    +{static} centerOnScreen(window : Window) : void
+    +{static} flowPanel(components : Component...) : JPanel
+    +{static} onEdt(action : Runnable) : void
+  }
+
+  class UIUtils {
+    +{static} showError(parent : Component, title : String, ex : Exception) : void
+  }
+}
+
+' =====================================================
+' Relationships (composition / dependency)
+' =====================================================
+MainLauncher ..> WeeFsApp
+WeeFsApp *--> "1" ArchiveModel
+WeeFsApp *--> "1" ArchiveController
+WeeFsApp *--> "1" MainFrame
+
+ArchiveModel o--> "*" MountSession
+ArchiveModel --> "0..1" FileNode : selectedFile
+ArchiveModel --> "1" FileSystemFactory
+ArchiveModel --> "1" PropertyChangeSupport
+MountSession --> "0..1" NfsConnectionConfig
+RemoteMountManager --> "0..1" NfsConnectionConfig
+
+ArchiveController --> "1" ArchiveModel
+ArchiveController *--> "1" FileOperations
+ArchiveController *--> "1" NfsFileOperations
+FileOperations --> ArchiveModel
+NfsFileOperations --> ArchiveModel
+NfsFileOperations --> NfsConnectionConfig
+NfsFileOperations ..> NfsIO
+NfsConnectionDialog ..> NfsConnectionConfig
+
+MainFrame --> "1" ArchiveModel
+MainFrame --> "1" IArchiveController
+MainFrame *--> "1" ArchiveTreePanel
+MainFrame *--> "1" FileContentPanel
+MainFrame *--> "1" StatusBarPanel
+MainFrame ..> MenuBarFactory
+MainFrame ..> ToolBarFactory
+
 ArchiveTreePanel --> ArchiveModel
-ArchiveTreePanel --> ArchiveController
-ArchiveTreePanel --> FileTreeCellRenderer
-FileContentPanel --> FileNode
-ToolBarFactory ..> ArchiveController
-MenuBarFactory ..> ArchiveController
-ArchiveController --> ArchiveModel
-ArchiveController --> IFileOperations
-ArchiveController --> ClipboardEntry
-ArchiveController --> NfsConnectionDialog
-FileTreeCellRenderer --> IconFactory
-FileContentPanel --> FileTypeDetector
+ArchiveTreePanel --> IArchiveController
+ArchiveTreePanel *--> JTree
+ArchiveTreePanel *--> DefaultTreeModel
+ArchiveTreePanel *--> DefaultMutableTreeNode
+ArchiveTreePanel ..> FileTreeCellRenderer
+ArchiveTreePanel ..> IconFactory
+
+FileContentPanel --> ArchiveModel
+FileContentPanel --> IArchiveController
+FileContentPanel ..> FileTypeDetector
+FileContentPanel ..> SwingUtils
+
+StatusBarPanel --> ArchiveModel
+StatusBarPanel ..> PropertyChangeListener
+StatusBarPanel ..> SwingUtils
+
+FileTreeCellRenderer ..> FileNode
+FileTreeCellRenderer ..> IconFactory
+
+MenuBarFactory ..> IArchiveController
+MenuBarFactory ..> ArchiveModel
+MenuBarFactory ..> SwingUtils
+ToolBarFactory ..> IArchiveController
+ToolBarFactory ..> ArchiveModel
+ToolBarFactory ..> IconFactory
+
+ArchiveController ..> NfsConnectionDialog
+SwingUtils ..> FlatLightLaf
+SwingUtils ..> FlatDarkLaf
+SwingUtils ..> SwingUtilities
+
+IArchiveController ..> IFileOperations
+INfsController ..> IFileOperations
+ArchiveController ..> IFileOperations
+
+UiIntegrationTest ..> ArchiveModel
+UiIntegrationTest ..> FileOperations
+
 @enduml

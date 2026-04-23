@@ -1,20 +1,49 @@
-@startuml
-title weefs — TAR & Core Extractor Module (core.extractor)
+@startuml tar-core-class-diagram
+title weefs — TAR + Core Extractor / FileSystem Module
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-package "Archive Format (Strategy)" {
-  interface ArchiveFormat <<Strategy>> {
-    +supports(archiveFile : Path) : boolean
-    +extract(archiveFile : Path, targetRoot : Path) : void
-    +write(sourceRoot : Path, archiveFile : Path) : void
-  }
+' =====================================================
+' External boundaries
+' =====================================================
+package "java.nio.file (JDK)" <<External>> {
+  abstract class FileSystem
+  abstract class FileSystemProvider
+  interface Path
+  interface "DirectoryStream<Path>" as DirectoryStream
+  interface SeekableByteChannel
+}
+package "java.util (JDK)" <<External>> {
+  interface "Iterator<Path>" as JdkIterator
+}
+package "java.util.zip (JDK)" <<External>> {
+  class ZipInputStream
+  class ZipOutputStream
+  class ZipEntry
+}
+package "org.kamranzafar.jtar" <<External>> {
+  class TarInputStream
+  class TarOutputStream
+  class TarEntry
+}
+package "io.wfs.core.extractor.compression (bridge)" <<External>> {
+  interface ICompressionStrategy
+  class CompressionStrategyFactory
+}
+package "io.wfs.util" <<External>> {
+  class FileUtils
+}
+package "io.wfs.core.filesystem (bridge)" <<External>> {
+  class FsEnvKeys
+}
 
-  class TarArchiveFormat {
-    -compression : ICompressionStrategy
-    +TarArchiveFormat(compression : ICompressionStrategy)
+' =====================================================
+' Archive format strategy
+' =====================================================
+package "io.wfs.core.extractor (formats)" {
+  interface ArchiveFormat <<Strategy>> {
     +supports(archiveFile : Path) : boolean
     +extract(archiveFile : Path, targetRoot : Path) : void
     +write(sourceRoot : Path, archiveFile : Path) : void
@@ -26,116 +55,222 @@ package "Archive Format (Strategy)" {
     +write(sourceRoot : Path, archiveFile : Path) : void
   }
 
-  class ArchiveFormats <<Registry>> {
-    +{static} defaults() : List<ArchiveFormat>
-    +{static} detect(archiveFile : Path) : ArchiveFormat
-    +{static} register(format : ArchiveFormat) : void
+  class TarArchiveFormat {
+    +supports(archiveFile : Path) : boolean
+    +extract(archiveFile : Path, targetRoot : Path) : void
+    +write(sourceRoot : Path, archiveFile : Path) : void
   }
 
-  class ArchiveFormatDetector {
-    +detect(archiveFile : Path) : ArchiveFormatInfo
-    -readMagic(archiveFile : Path, bytes : int) : byte[]
+  class ArchiveFormats <<Registry>> {
+    -{static} FORMATS : List<ArchiveFormat>
+    -ArchiveFormats()
+    +{static} resolve(archiveFile : Path) : ArchiveFormat
+    +{static} extractToDirectory(archiveFile : Path, target : Path) : void
+    +{static} writeFromDirectory(sourceRoot : Path, archiveFile : Path) : void
+  }
+
+  class ArchiveFormatDetector <<utility>> {
+    -ArchiveFormatDetector()
+    ~{static} detect(archiveFile : Path) : ArchiveFormatInfo
   }
 
   class ArchiveFormatInfo <<value>> {
-    -container : ArchiveContainerType
-    -compression : String
-    -displayName : String
+    -containerType : ArchiveContainerType
+    -compressionKey : String
+    ~ArchiveFormatInfo(type : ArchiveContainerType, key : String)
+    ~containerType() : ArchiveContainerType
+    ~compressionKey() : String
   }
 
   enum ArchiveContainerType {
     ZIP
     TAR
-    GZIP
-    BZIP2
-    XZ
-    UNKNOWN
+    SINGLE_FILE
   }
 
-  ArchiveFormat <|.. TarArchiveFormat
   ArchiveFormat <|.. ZipArchiveFormat
-  ArchiveFormats --> ArchiveFormat
-  ArchiveFormatDetector --> ArchiveFormatInfo
+  ArchiveFormat <|.. TarArchiveFormat
+  ArchiveFormats o--> "*" ArchiveFormat : FORMATS
+  ArchiveFormatDetector ..> ArchiveFormatInfo
   ArchiveFormatInfo --> ArchiveContainerType
 }
 
-package "weefs:// FileSystem" {
-  class ExtZipFileSystem extends FileSystem {
+' =====================================================
+' weefs:// virtual FileSystem (ExtZip*)
+' =====================================================
+package "io.wfs.core.extractor (fs provider)" {
+  class ExtZipFileSystem {
     -provider : ExtZipFsProvider
-    -inner : FileSystem
-    -root : ExtZipPath
+    -archivePath : Path
+    -tempRoot : Path
     -readOnly : boolean
+    -open : AtomicBoolean
+    -shutdownHook : Thread
     +provider() : FileSystemProvider
-    +getPath(first : String, more : String[]) : Path
     +close() : void
+    +isOpen() : boolean
+    +isReadOnly() : boolean
+    +getSeparator() : String
+    +getRootDirectories() : Iterable<Path>
+    +getFileStores() : Iterable<FileStore>
+    +supportedFileAttributeViews() : Set<String>
+    +getPath(first : String, more : String[]) : Path
+    +getPathMatcher(syntaxAndPattern : String) : PathMatcher
+    +getUserPrincipalLookupService() : UserPrincipalLookupService
+    +newWatchService() : WatchService
+    #installShutdownHook() : void
+    #getArchivePath() : Path
+    #getTempRoot() : Path
+    #wrap(p : Path) : ExtZipPath
+    #ensureWritable() : void
+    #ensureWritableFor(options : Set<? extends OpenOption>) : void
   }
 
-  class ExtZipFsProvider extends FileSystemProvider {
-    -fileSystems : Map<URI, ExtZipFileSystem>
+  class ExtZipFsProvider {
+    -mounted : Map<Path, ExtZipFileSystem>
     +getScheme() : String
     +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
     +getFileSystem(uri : URI) : FileSystem
-    +newByteChannel(path : Path, opts : Set<OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
+    +getPath(uri : URI) : Path
+    +newByteChannel(p : Path, opts : Set<? extends OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
     +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
+    +createDirectory(dir : Path, attrs : FileAttribute<?>[]) : void
     +delete(path : Path) : void
+    +copy(src : Path, tgt : Path, opts : CopyOption[]) : void
+    +move(src : Path, tgt : Path, opts : CopyOption[]) : void
+    +isSameFile(a : Path, b : Path) : boolean
+    +isHidden(path : Path) : boolean
+    +getFileStore(path : Path) : FileStore
+    +checkAccess(path : Path, modes : AccessMode[]) : void
+    +readAttributes(path : Path, type : Class<A>, opts : LinkOption[]) : A
+    +readAttributes(path : Path, attrs : String, opts : LinkOption[]) : Map<String, Object>
+    +setAttribute(path : Path, attr : String, value : Object, opts : LinkOption[]) : void
+    #resolveArchivePath(raw : String, env : Map<String, ?>) : Path
+    #toKey(archivePath : Path) : Path
+    #requireExtPath(p : Path) : ExtZipPath
+    #unregister(fs : ExtZipFileSystem) : void
   }
 
-  class ExtZipPath implements Path {
-    -fs : ExtZipFileSystem
-    -segments : String[]
+  class ExtZipPath {
+    -fileSystem : ExtZipFileSystem
+    -delegate : Path
+    +getFileSystem() : ExtZipFileSystem
+    +isAbsolute() : boolean
+    +getRoot() : Path
     +getFileName() : Path
+    +getParent() : Path
+    +getNameCount() : int
+    +getName(index : int) : Path
+    +subpath(begin : int, end : int) : Path
     +resolve(other : Path) : Path
+    +relativize(other : Path) : Path
     +toUri() : URI
+    +toAbsolutePath() : Path
+    +toRealPath(opts : LinkOption[]) : Path
+    +toFile() : File
+    +iterator() : Iterator<Path>
+    +compareTo(other : Path) : int
+    #getExtZipFileSystem() : ExtZipFileSystem
+    #getDelegate() : Path
   }
 
-  class ExtZipFsIO {
-    +read(path : ExtZipPath) : byte[]
-    +write(path : ExtZipPath, bytes : byte[]) : void
-    +list(path : ExtZipPath) : List<ExtZipPath>
-  }
-
-  class ExtZipDirectoryStream implements DirectoryStream<Path> {
+  class ExtZipDirectoryStream {
+    -delegate : DirectoryStream<Path>
+    -fileSystem : ExtZipFileSystem
+    -filter : Filter<? super Path>
     +iterator() : Iterator<Path>
     +close() : void
   }
-  class ExtZipDirectoryIterator implements Iterator<Path> {
+
+  class ExtZipDirectoryIterator {
+    -delegate : Iterator<Path>
+    -fileSystem : ExtZipFileSystem
+    -filter : Filter<? super Path>
+    -next : Path
+    -prepared : boolean
     +hasNext() : boolean
     +next() : Path
   }
-  class ExtZipPathIterator implements Iterator<Path> {
+
+  class ExtZipPathIterator {
+    -fileSystem : ExtZipFileSystem
+    -delegate : Iterator<Path>
     +hasNext() : boolean
     +next() : Path
   }
-  class ExtZipParsedUri {
-    -underlying : URI
-    -innerScheme : String
-    +{static} parse(uri : URI) : ExtZipParsedUri
+
+  class ExtZipParsedUri <<value>> {
+    -archivePart : String
+    -entryPart : String
+    +archivePart() : String
+    +entryPart() : String
+    +{static} parse(uri : URI, scheme : String) : ExtZipParsedUri
   }
 
-  ExtZipFileSystem --> ExtZipFsProvider
-  ExtZipFileSystem --> ExtZipPath
-  ExtZipFsProvider --> ExtZipFileSystem
-  ExtZipFsProvider --> ExtZipFsIO
-  ExtZipDirectoryStream --> ExtZipDirectoryIterator
-  ExtZipPath --> ExtZipFileSystem
-  ExtZipParsedUri ..> ExtZipFileSystem
-}
-
-package "Utility" {
-  class FileUtils {
+  class ExtZipFsIO <<utility>> {
+    +{static} extractArchiveToDirectory(archive : Path, target : Path) : void
+    +{static} extractZipToDirectory(archive : Path, target : Path) : void
+    +{static} extractTarToDirectory(archive : Path, target : Path, compressionKey : String) : void
+    +{static} writeDirectoryToArchive(src : Path, archive : Path) : void
+    +{static} writeDirectoryToZip(src : Path, archive : Path) : void
+    +{static} writeDirectoryToTar(src : Path, archive : Path, compressionKey : String) : void
+    +{static} extractSingleFileArchiveToDirectory(archive : Path, target : Path, key : String) : void
+    +{static} writeDirectoryToSingleFileArchive(src : Path, archive : Path, key : String) : void
     +{static} deleteRecursively(root : Path) : void
   }
 }
 
-' Cross-package wiring
-TarArchiveFormat ..> "core.extractor.compression.ICompressionStrategy" : uses
-ExtZipFsProvider ..> ArchiveFormats : resolves
-ExtZipFsIO ..> FileUtils
+' =====================================================
+' Inheritance / implementation
+' =====================================================
+ExtZipFileSystem --|> FileSystem
+ExtZipFsProvider --|> FileSystemProvider
+ExtZipPath ..|> Path
+ExtZipDirectoryStream ..|> DirectoryStream
+ExtZipDirectoryIterator ..|> JdkIterator
+ExtZipPathIterator ..|> JdkIterator
 
-legend right
-  TarArchiveFormat is parameterised
-  by an ICompressionStrategy (gzip,
-  bzip2, xz, lzma, none) — see
-  gzip-class-diagram.
-endlegend
+' =====================================================
+' Compositions / dependencies
+' =====================================================
+ExtZipFileSystem --> "1" ExtZipFsProvider
+ExtZipFileSystem *--> "1" Path : archivePath
+ExtZipFileSystem *--> "1" Path : tempRoot
+ExtZipFsProvider o--> "*" ExtZipFileSystem : mounted
+ExtZipFsProvider ..> FsEnvKeys
+ExtZipFsProvider ..> ExtZipPath
+ExtZipFsProvider ..> ExtZipFileSystem
+ExtZipPath --> "1" ExtZipFileSystem
+ExtZipPath --> "1" Path : delegate
+ExtZipDirectoryStream --> ExtZipFileSystem
+ExtZipDirectoryStream --> DirectoryStream : delegate
+ExtZipDirectoryIterator --> ExtZipFileSystem
+ExtZipDirectoryIterator --> JdkIterator : delegate
+ExtZipPathIterator --> ExtZipFileSystem
+
+' Format resolution
+ArchiveFormats ..> ArchiveFormatDetector
+ArchiveFormats ..> ArchiveFormat
+ExtZipFileSystem ..> ArchiveFormats
+ExtZipFileSystem ..> ArchiveFormatInfo
+ExtZipFileSystem ..> ExtZipFsIO
+ExtZipFsIO ..> CompressionStrategyFactory
+ExtZipFsIO ..> ICompressionStrategy
+ExtZipFsIO ..> ZipInputStream
+ExtZipFsIO ..> ZipOutputStream
+ExtZipFsIO ..> ZipEntry
+ExtZipFsIO ..> TarInputStream
+ExtZipFsIO ..> TarOutputStream
+ExtZipFsIO ..> TarEntry
+ExtZipFsIO ..> FileUtils
+TarArchiveFormat ..> ExtZipFsIO
+ZipArchiveFormat ..> ExtZipFsIO
+ExtZipParsedUri ..> ExtZipFsProvider : <<used by>>
+
+note bottom of ArchiveFormat
+  Strategy: resolve() picks the right
+  format; each delegates actual byte
+  work to ExtZipFsIO + compression
+  strategies.
+end note
 @enduml

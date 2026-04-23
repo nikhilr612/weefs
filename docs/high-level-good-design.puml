@@ -10,10 +10,14 @@ package "UI (clean MVC)" {
   class ArchiveModel {
     -sessions : List<MountSession>
     -activeSession : MountSession
+    -fileSystemFactory : FileSystemFactory
     --
-    +addSession(MountSession) : void
+    +openArchive(Path, boolean) : void
+    +openDirectory(Path, boolean) : void
+    +openMountUri(URI, boolean) : void
     +closeSession(String) : void
     +setActiveSession(String) : void
+    +setNfsConfig(NfsConnectionConfig) : void
   }
   class MountSession <<Value Object>> {
     -id : String
@@ -24,11 +28,15 @@ package "UI (clean MVC)" {
     -nfsConfig : NfsConnectionConfig
     +isSaveable() : boolean
   }
-  class RemoteMountManager <<Extract Class>>
-  class ClipboardEntry <<Value Object>> {
-    -sourceSessionId : String
-    -node : FileNode
-    -cut : boolean
+  class RemoteMountManager <<Extract Class>> {
+    -nfsConfig : NfsConnectionConfig
+    +setNfsConfig(NfsConnectionConfig) : void
+    +isNfsMounted() : boolean
+  }
+  class ClipboardEntry <<Value Object>> <<record>> {
+    +node : FileNode
+    +cut : boolean
+    +sourceSessionId : String
   }
 
   interface IArchiveController
@@ -49,7 +57,6 @@ package "UI (clean MVC)" {
   IFileOperations <|.. NfsFileOperations
 
   ArchiveModel "1" o-- "*" MountSession
-  ArchiveModel --> RemoteMountManager
   ArchiveController --> ArchiveModel
   ArchiveController --> IFileOperations
   ArchiveController --> ClipboardEntry
@@ -106,7 +113,7 @@ package "Archive format (Strategy)" {
   ArchiveFormat <|.. TarArchiveFormat
   ArchiveFormat <|.. ZipArchiveFormat
   ArchiveFormats --> ArchiveFormat
-  ArchiveFormatDetector --> ArchiveFormats
+  ArchiveFormats ..> ArchiveFormatDetector
 }
 
 package "Compression (Strategy + Factory)" {
@@ -130,12 +137,14 @@ package "Compression (Strategy + Factory)" {
 
 package "NFS (isolated transport)" {
   interface IRemoteFileSystem
-  class NfsFsProvider
+  class NfsFileSystem
+  class NfsFsProvider <<legacy>>
   class NfsSftpFsProvider
-  class NfsSftpFsIO
+  class NfsSftpFsIO <<utility>>
+  NfsFileSystem ..|> IRemoteFileSystem
   NfsFileSystemDriver --> NfsSftpFsProvider
-  NfsSftpFsProvider --> NfsSftpFsIO
-  NfsFsProvider ..> IRemoteFileSystem
+  NfsSftpFsProvider --> NfsFileSystem
+  NfsSftpFsProvider ..> NfsSftpFsIO
 }
 
 legend right

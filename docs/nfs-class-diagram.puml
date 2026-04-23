@@ -1,182 +1,364 @@
-@startuml
-title weefs — NFS Module (core.nfs)
+@startuml nfs-class-diagram
+title weefs — NFS / SFTP Remote Module (io.wfs.core.nfs)
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-interface IRemoteFileSystem <<abstraction>> {
-  +sftpConfig() : NfsSftpConfig
-  +hasSftpConfig() : boolean
-  +toRemotePath(path : NfsPath) : String
-  +ensureWritable() : void
-  +ensureWritableFor(opts : Set<? extends OpenOption>) : void
-  +ensureOpen() : void
+' =====================================================
+' External JDK & 3rd-party boundary
+' =====================================================
+package "java.nio.file (JDK)" <<External>> {
+  abstract class FileSystem
+  abstract class FileSystemProvider
+  interface Path
+  interface "DirectoryStream<Path>" as DirectoryStream
+  interface SeekableByteChannel
+  interface BasicFileAttributes
+}
+package "java.util (JDK)" <<External>> {
+  interface "Iterator<Path>" as JdkIterator
+}
+package "com.jcraft.jsch" <<External>> {
+  class JSch
+  class Session
+  class ChannelSftp
+  class SftpATTRS
+}
+package "org.apache.sshd" <<External>> {
+  class SshServer
+  interface PasswordAuthenticator
+}
+package "io.wfs.core.filesystem (bridge)" <<External>> {
+  class FsEnvKeys
 }
 
-class NfsFileSystem extends FileSystem {
-  -provider : NfsSftpFsProvider
-  -sftpConfig : NfsSftpConfig
-  -readOnly : boolean
-  -root : NfsPath
-  +getPath(first : String, more : String[]) : Path
-  +provider() : FileSystemProvider
-  +close() : void
-  +sftpConfig() : NfsSftpConfig
-  +toRemotePath(path : NfsPath) : String
-}
-IRemoteFileSystem <|.. NfsFileSystem
+' =====================================================
+' Core NFS types
+' =====================================================
+package "io.wfs.core.nfs" {
+  interface IRemoteFileSystem {
+    +sftpConfig() : NfsSftpConfig
+    +hasSftpConfig() : boolean
+    +toRemotePath(path : NfsPath) : String
+    +ensureWritable() : void
+    +ensureWritableFor(options : Set<? extends OpenOption>) : void
+    +ensureOpen() : void
+    +fileSystem() : FileSystem
+  }
 
-class NfsPath implements Path {
-  -fs : NfsFileSystem
-  -segments : String[]
-  -absolute : boolean
-  +getFileSystem() : NfsFileSystem
-  +resolve(other : Path) : Path
-  +normalize() : Path
-  +toUri() : URI
-  +toString() : String
+  class NfsFileSystem {
+    -provider : FileSystemProvider
+    -sftpProvider : NfsSftpFsProvider
+    -config : NfsSftpConfig
+    -legacyConfig : NfsConnectionConfig
+    -readOnly : boolean
+    -open : AtomicBoolean
+    -shutdownHook : Thread
+    ~NfsFileSystem(provider : NfsSftpFsProvider, config : NfsSftpConfig, readOnly : boolean)
+    ~NfsFileSystem(provider : NfsFsProvider, config : NfsConnectionConfig)
+    +sftpConfig() : NfsSftpConfig
+    +hasSftpConfig() : boolean
+    +fileSystem() : FileSystem
+    +toRemotePath(path : NfsPath) : String
+    ~installShutdownHook() : void
+    ~getConfig() : NfsConnectionConfig
+  }
+
+  class NfsSftpFsProvider {
+    -mounted : Map<String, NfsFileSystem>
+    +getScheme() : String
+    +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+    +getFileSystem(uri : URI) : FileSystem
+    +getPath(uri : URI) : Path
+    +newByteChannel(p : Path, opts : Set<? extends OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
+    +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
+    +createDirectory(dir : Path, attrs : FileAttribute<?>[]) : void
+    +delete(path : Path) : void
+    +copy(src : Path, tgt : Path, opts : CopyOption[]) : void
+    +move(src : Path, tgt : Path, opts : CopyOption[]) : void
+    +isSameFile(a : Path, b : Path) : boolean
+    +isHidden(path : Path) : boolean
+    +getFileStore(path : Path) : FileStore
+    +checkAccess(path : Path, modes : AccessMode[]) : void
+    +readAttributes(path : Path, type : Class<A>, opts : LinkOption[]) : A
+    +readAttributes(path : Path, attrs : String, opts : LinkOption[]) : Map<String, Object>
+    +setAttribute(path : Path, attr : String, value : Object, opts : LinkOption[]) : void
+    #unregister(fs : NfsFileSystem) : void
+  }
+
+  class NfsFsProvider <<legacy>> {
+    -{static} SCHEME : String
+    -mounted : Map<String, NfsFileSystem>
+    +getScheme() : String
+    +newFileSystem(path : Path, env : Map<String, ?>) : FileSystem
+    +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+    +getFileSystem(uri : URI) : FileSystem
+    +getPath(uri : URI) : Path
+    +newByteChannel(p : Path, opts : Set<? extends OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
+    +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
+    +createDirectory(dir : Path, attrs : FileAttribute<?>[]) : void
+    +delete(path : Path) : void
+    +copy(src : Path, tgt : Path, opts : CopyOption[]) : void
+    +move(src : Path, tgt : Path, opts : CopyOption[]) : void
+  }
+
+  class NfsPath {
+    -fileSystem : NfsFileSystem
+    -virtualPath : String
+    -delegate : Path
+    ~NfsPath(fs : NfsFileSystem, virtualPath : String)
+    +getFileSystem() : NfsFileSystem
+    +isAbsolute() : boolean
+    +getRoot() : Path
+    +getFileName() : Path
+    +getParent() : Path
+    +getNameCount() : int
+    +getName(index : int) : Path
+    +subpath(begin : int, end : int) : Path
+    +resolve(other : Path) : Path
+    +relativize(other : Path) : Path
+    +toUri() : URI
+    +toAbsolutePath() : Path
+    +toRealPath(opts : LinkOption[]) : Path
+    +iterator() : Iterator<Path>
+    ~virtualPath() : String
+    ~getNfsFileSystem() : NfsFileSystem
+  }
+
+  class NfsIO <<utility>> {
+    +{static} verifyConnection(cfg : NfsConnectionConfig) : void
+    +{static} listDirectory(cfg : NfsConnectionConfig, path : String) : List<NfsFileInfo>
+    +{static} readFile(cfg : NfsConnectionConfig, path : String) : byte[]
+    +{static} writeFile(cfg : NfsConnectionConfig, path : String, content : byte[]) : void
+    +{static} createDirectory(cfg : NfsConnectionConfig, path : String) : void
+    +{static} delete(cfg : NfsConnectionConfig, path : String) : void
+    +{static} rename(cfg : NfsConnectionConfig, oldPath : String, newPath : String) : void
+    +{static} copy(cfg : NfsConnectionConfig, src : String, dst : String) : void
+  }
+
+  class NfsSftpFsIO <<utility>> {
+    +{static} ensureMountRootExists(cfg : NfsSftpConfig) : void
+    +{static} listDirectory(cfg : NfsSftpConfig, path : String) : List<RemoteEntry>
+    +{static} stat(cfg : NfsSftpConfig, path : String) : RemoteFileStat
+    +{static} lstat(cfg : NfsSftpConfig, path : String) : RemoteFileStat
+    +{static} exists(cfg : NfsSftpConfig, path : String) : boolean
+    +{static} readFile(cfg : NfsSftpConfig, path : String) : byte[]
+    +{static} writeFile(cfg : NfsSftpConfig, path : String, data : byte[], append : boolean) : void
+    +{static} createFile(cfg : NfsSftpConfig, path : String, overwrite : boolean) : void
+    +{static} createDirectory(cfg : NfsSftpConfig, path : String) : void
+    +{static} deleteFile(cfg : NfsSftpConfig, path : String) : void
+    +{static} deleteDirectory(cfg : NfsSftpConfig, path : String) : void
+    +{static} move(cfg : NfsSftpConfig, from : String, to : String) : void
+    +{static} copyFile(cfg : NfsSftpConfig, from : String, to : String) : void
+    +{static} readBasicAttributesMap(cfg : NfsSftpConfig, path : String) : Map<String, Object>
+    +{static} withChannel(cfg : NfsSftpConfig, work : SftpWork<T>) : T
+  }
+
+  class RemoteEntry <<nested>> {
+    +name() : String
+    +directory() : boolean
+    +symbolicLink() : boolean
+    +size() : long
+    +lastModifiedTime() : FileTime
+  }
+  class RemoteFileStat <<nested>> {
+    +directory() : boolean
+    +symbolicLink() : boolean
+    +size() : long
+    +lastModifiedTime() : FileTime
+  }
+  interface "SftpWork<T>" as SftpWork <<functional>> {
+    +run(ch : ChannelSftp) : T
+  }
+  NfsSftpFsIO +-- RemoteEntry
+  NfsSftpFsIO +-- RemoteFileStat
+  NfsSftpFsIO +-- SftpWork
+
+  class NfsConnectionConfig <<value>> {
+    -host : String
+    -port : int
+    -exportPath : String
+    -mountPath : String
+    -timeoutSeconds : int
+    -readOnly : boolean
+    +NfsConnectionConfig(host : String, port : int, exportPath : String, mountPath : String, timeoutSeconds : int, readOnly : boolean)
+    +getHost() : String
+    +getPort() : int
+    +getExportPath() : String
+    +getMountPath() : String
+    +getTimeoutSeconds() : int
+    +isReadOnly() : boolean
+  }
+
+  class NfsSftpConfig <<value>> {
+    -host : String
+    -port : int
+    -username : String
+    -password : String
+    -remoteRoot : String
+    -authEnvVar : String
+    +host() : String
+    +port() : int
+    +username() : String
+    +password() : String
+    +remoteRoot() : String
+    +authEnvVar() : String
+  }
+
+  class NfsParsedUri <<value>> {
+    -host : String
+    -port : int
+    -remotePath : String
+    -authEnvVar : String
+    -username : String
+    +host() : String
+    +port() : int
+    +remotePath() : String
+    +authEnvVar() : String
+    +username() : String
+    +{static} parse(uri : URI, scheme : String) : NfsParsedUri
+  }
+
+  class NfsFileInfo <<value>> {
+    -name : String
+    -fullPath : String
+    -directory : boolean
+    -size : long
+    -lastModified : long
+    +getName() : String
+    +getFullPath() : String
+    +isDirectory() : boolean
+    +getSize() : long
+    +getLastModified() : long
+    +getExtension() : String
+    ~{static} fromPath(p : Path) : NfsFileInfo
+  }
+
+  class NfsBasicFileAttributes {
+    -directory : boolean
+    -symbolicLink : boolean
+    -size : long
+    -lastModifiedTime : FileTime
+    +lastModifiedTime() : FileTime
+    +lastAccessTime() : FileTime
+    +creationTime() : FileTime
+    +isRegularFile() : boolean
+    +isDirectory() : boolean
+    +isSymbolicLink() : boolean
+    +isOther() : boolean
+    +size() : long
+    +fileKey() : Object
+  }
+
+  class NfsDirectoryStream {
+    -entries : List<Path>
+    -filter : Filter<? super Path>
+    -open : boolean
+    +iterator() : Iterator<Path>
+    +close() : void
+  }
+
+  class NfsDirectoryIterator {
+    -delegate : Iterator<Path>
+    -filter : Filter<? super Path>
+    -next : Path
+    -prepared : boolean
+    +hasNext() : boolean
+    +next() : Path
+  }
+
+  class NfsPathIterator {
+    -fileSystem : NfsFileSystem
+    -delegate : Iterator<Path>
+    +hasNext() : boolean
+    +next() : Path
+  }
+
+  class NfsSyncingByteChannel {
+    -fileSystem : NfsFileSystem
+    -path : NfsPath
+    -readable : boolean
+    -writable : boolean
+    -buffer : byte[]
+    -size : int
+    -position : long
+    -dirty : boolean
+    -open : boolean
+    +read(buf : ByteBuffer) : int
+    +write(buf : ByteBuffer) : int
+    +position() : long
+    +position(newPos : long) : SeekableByteChannel
+    +size() : long
+    +truncate(size : long) : SeekableByteChannel
+    +isOpen() : boolean
+    +close() : void
+  }
+
+  class SftpArchiveServer <<entry-point>> {
+    -{static} DEFAULT_ARCHIVE : String
+    -{static} DEFAULT_PORT : int
+    -{static} DEFAULT_USERNAME : String
+    -{static} DEFAULT_PASSWORD : String
+    -archivePath : Path
+    -port : int
+    -username : String
+    -password : String
+    -hostKeyPath : Path
+    -mountedArchiveFs : FileSystem
+    -sshServer : SshServer
+    -SftpArchiveServer(archivePath : Path, port : int, username : String, password : String)
+    +{static} main(args : String[]) : void
+    -start() : void
+  }
+  class "Args" as SASArgs <<record>>
+  SftpArchiveServer +-- SASArgs
 }
 
-class NfsSftpFsProvider extends FileSystemProvider {
-  -fileSystems : Map<URI, NfsFileSystem>
-  +getScheme() : String
-  +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
-  +getFileSystem(uri : URI) : FileSystem
-  +newByteChannel(path : Path, opts : Set<OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
-  +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
-  +delete(path : Path) : void
-  +copy(src : Path, tgt : Path, opts : CopyOption[]) : void
-  +move(src : Path, tgt : Path, opts : CopyOption[]) : void
-}
+' =====================================================
+' Inheritance / implementation
+' =====================================================
+NfsFileSystem --|> FileSystem
+NfsFileSystem ..|> IRemoteFileSystem
+NfsSftpFsProvider --|> FileSystemProvider
+NfsFsProvider --|> FileSystemProvider
+NfsPath ..|> Path
+NfsDirectoryStream ..|> DirectoryStream
+NfsDirectoryIterator ..|> JdkIterator
+NfsPathIterator ..|> JdkIterator
+NfsBasicFileAttributes ..|> BasicFileAttributes
+NfsSyncingByteChannel ..|> SeekableByteChannel
 
-class NfsFsProvider extends FileSystemProvider {
-  +getScheme() : String
-  +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
-}
+' =====================================================
+' Compositions / associations
+' =====================================================
+NfsFileSystem --> "1" NfsSftpFsProvider : sftpProvider
+NfsFileSystem --> "1" NfsSftpConfig : config
+NfsFileSystem --> "0..1" NfsConnectionConfig : legacyConfig
+NfsSftpFsProvider o--> "*" NfsFileSystem : mounted
+NfsFsProvider o--> "*" NfsFileSystem : mounted
 
-class NfsSftpFsIO <<SFTP adapter>> {
-  -config : NfsSftpConfig
-  +withChannel(work : SftpWork<T>) : T
-  +list(remotePath : String) : List<RemoteEntry>
-  +stat(remotePath : String) : RemoteFileStat
-  +readAllBytes(remotePath : String) : byte[]
-  +write(remotePath : String, bytes : byte[]) : void
-  +mkdir(remotePath : String) : void
-  +rm(remotePath : String) : void
-  +rename(src : String, dst : String) : void
-}
-
-interface SftpWork<T> {
-  +run(channel : ChannelSftp) : T
-}
-NfsSftpFsIO +-- SftpWork
-NfsSftpFsIO +-- RemoteEntry
-NfsSftpFsIO +-- RemoteFileStat
-
-class RemoteEntry {
-  -name : String
-  -directory : boolean
-  -size : long
-  -mtime : long
-}
-class RemoteFileStat {
-  -size : long
-  -mtime : long
-  -directory : boolean
-  -exists : boolean
-}
-
-class NfsIO {
-  +readAttributes(path : NfsPath) : NfsBasicFileAttributes
-  +newByteChannel(path : NfsPath, opts : Set<OpenOption>) : SeekableByteChannel
-  +newDirectoryStream(path : NfsPath) : DirectoryStream<Path>
-}
-
-class NfsSyncingByteChannel implements SeekableByteChannel {
-  -fileSystem : NfsFileSystem
-  -path : NfsPath
-  -readable : boolean
-  -writable : boolean
-  -buffer : byte[]
-  -position : long
-  -dirty : boolean
-  +read(dst : ByteBuffer) : int
-  +write(src : ByteBuffer) : int
-  +position() : long
-  +truncate(size : long) : SeekableByteChannel
-  +close() : void
-}
-
-class NfsDirectoryStream implements DirectoryStream<Path> {
-  +iterator() : Iterator<Path>
-  +close() : void
-}
-class NfsDirectoryIterator implements Iterator<Path> {
-  +hasNext() : boolean
-  +next() : Path
-}
-class NfsPathIterator implements Iterator<Path> {
-  +hasNext() : boolean
-  +next() : Path
-}
-
-class NfsBasicFileAttributes implements BasicFileAttributes {
-  -size : long
-  -lastModified : FileTime
-  -directory : boolean
-  +size() : long
-  +isDirectory() : boolean
-}
-class NfsFileInfo {
-  -exists : boolean
-  -directory : boolean
-  -size : long
-  -mtime : long
-}
-class NfsConnectionConfig <<value>> {
-  -host : String
-  -port : int
-  -exportPath : String
-  -mountPath : String
-  -timeoutSeconds : int
-  -readOnly : boolean
-  +isReadOnly() : boolean
-}
-class NfsSftpConfig <<value>> {
-  -host : String
-  -port : int
-  -username : String
-  -password : String
-  -remoteRoot : String
-  -readOnly : boolean
-}
-class NfsParsedUri {
-  -host : String
-  -port : int
-  -exportPath : String
-  +{static} parse(uri : URI) : NfsParsedUri
-}
-
-class SftpArchiveServer {
-  -properties : SftpServerProperties
-  -mounts : List<ArchiveVfsMount>
-  +start() : void
-  +stop() : void
-}
-
-' Relationships
-NfsFileSystem --> NfsPath
-NfsFileSystem --> NfsSftpFsProvider
-NfsFileSystem --> NfsSftpConfig
-NfsSftpFsProvider --> NfsFileSystem
-NfsSftpFsProvider --> NfsSftpFsIO
-NfsSftpFsProvider --> NfsSyncingByteChannel
+NfsPath --> "1" NfsFileSystem
+NfsPath --> "1" Path : delegate
 NfsSyncingByteChannel --> NfsFileSystem
 NfsSyncingByteChannel --> NfsPath
-NfsIO --> NfsSftpFsIO
-NfsIO --> NfsBasicFileAttributes
-NfsDirectoryStream --> NfsDirectoryIterator
-NfsPath --> NfsFileSystem
-NfsParsedUri ..> NfsSftpConfig
+
+NfsDirectoryIterator --> JdkIterator : delegate
+NfsPathIterator --> NfsFileSystem
+NfsPathIterator --> JdkIterator : delegate
+NfsDirectoryStream --> "*" Path
+
+NfsSftpFsProvider ..> NfsSftpFsIO
+NfsSftpFsProvider ..> FsEnvKeys
+NfsSftpFsIO ..> ChannelSftp
+NfsSftpFsIO ..> JSch
+NfsSftpFsIO ..> Session
+NfsSftpFsIO ..> SftpATTRS
+NfsIO ..> NfsConnectionConfig
+NfsIO ..> NfsFileInfo
+NfsParsedUri ..> NfsSftpConfig : <<parse result>>
+
+SftpArchiveServer ..> SshServer
+SftpArchiveServer ..> PasswordAuthenticator
+SftpArchiveServer ..> NfsSftpFsProvider
 @enduml

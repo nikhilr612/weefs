@@ -1,73 +1,114 @@
-@startuml
-title weefs — Compression / Gzip Module (core.extractor.compression)
+@startuml gzip-class-diagram
+title weefs — Compression Strategy Module (io.wfs.core.extractor.compression)
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-interface ICompressionStrategy <<Strategy>> {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
+' =====================================================
+' External boundaries
+' =====================================================
+package "java.io / java.util.zip (JDK)" <<External>> {
+  abstract class InputStream
+  abstract class OutputStream
+  class GZIPInputStream
+  class GZIPOutputStream
 }
 
-class NoCompressionStrategy {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
+package "org.apache.commons.compress.compressors" <<External>> {
+  class BZip2CompressorInputStream
+  class BZip2CompressorOutputStream
+  class LZMACompressorInputStream
+  class LZMACompressorOutputStream
 }
 
-class GzipCompressionStrategy {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
+package "org.tukaani.xz" <<External>> {
+  class XZInputStream
+  class XZOutputStream
+  class LZMA2Options
 }
 
-class Bzip2CompressionStrategy {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
+package "io.wfs.core.extractor (bridge)" <<External>> {
+  class ExtZipFsIO
+  class TarArchiveFormat
 }
 
-class XzCompressionStrategy {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
+' =====================================================
+' Strategy interface + implementations
+' =====================================================
+package "io.wfs.core.extractor.compression" {
+  interface ICompressionStrategy <<Strategy>> {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class NoCompressionStrategy {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class GzipCompressionStrategy {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class Bzip2CompressionStrategy {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class XzCompressionStrategy {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class LzmaCompressionStrategy {
+    +wrapInput(input : InputStream) : InputStream
+    +wrapOutput(output : OutputStream) : OutputStream
+  }
+
+  class CompressionStrategyFactory <<Factory>> {
+    -CompressionStrategyFactory()
+    +{static} forKey(key : String) : ICompressionStrategy
+  }
+
+  ICompressionStrategy <|.. NoCompressionStrategy
+  ICompressionStrategy <|.. GzipCompressionStrategy
+  ICompressionStrategy <|.. Bzip2CompressionStrategy
+  ICompressionStrategy <|.. XzCompressionStrategy
+  ICompressionStrategy <|.. LzmaCompressionStrategy
+
+  CompressionStrategyFactory ..> ICompressionStrategy : creates
+  CompressionStrategyFactory ..> NoCompressionStrategy
+  CompressionStrategyFactory ..> GzipCompressionStrategy
+  CompressionStrategyFactory ..> Bzip2CompressionStrategy
+  CompressionStrategyFactory ..> XzCompressionStrategy
+  CompressionStrategyFactory ..> LzmaCompressionStrategy
 }
 
-class LzmaCompressionStrategy {
-  +wrapInput(input : InputStream) : InputStream
-  +wrapOutput(output : OutputStream) : OutputStream
-}
+' =====================================================
+' Dependencies on external libraries
+' =====================================================
+GzipCompressionStrategy ..> GZIPInputStream
+GzipCompressionStrategy ..> GZIPOutputStream
+Bzip2CompressionStrategy ..> BZip2CompressorInputStream
+Bzip2CompressionStrategy ..> BZip2CompressorOutputStream
+XzCompressionStrategy ..> XZInputStream
+XzCompressionStrategy ..> XZOutputStream
+XzCompressionStrategy ..> LZMA2Options
+LzmaCompressionStrategy ..> LZMACompressorInputStream
+LzmaCompressionStrategy ..> LZMACompressorOutputStream
 
-class CompressionStrategyFactory <<Factory>> {
-  +{static} forName(name : String) : ICompressionStrategy
-  +{static} forExtension(ext : String) : ICompressionStrategy
-  +{static} gzip() : ICompressionStrategy
-  +{static} none() : ICompressionStrategy
-}
+' Callers
+ExtZipFsIO ..> CompressionStrategyFactory : <<uses>>
+ExtZipFsIO ..> ICompressionStrategy
+TarArchiveFormat ..> CompressionStrategyFactory
+TarArchiveFormat ..> ICompressionStrategy
 
-ICompressionStrategy <|.. NoCompressionStrategy
-ICompressionStrategy <|.. GzipCompressionStrategy
-ICompressionStrategy <|.. Bzip2CompressionStrategy
-ICompressionStrategy <|.. XzCompressionStrategy
-ICompressionStrategy <|.. LzmaCompressionStrategy
-
-CompressionStrategyFactory ..> ICompressionStrategy : returns
-CompressionStrategyFactory ..> NoCompressionStrategy : creates
-CompressionStrategyFactory ..> GzipCompressionStrategy : creates
-CompressionStrategyFactory ..> Bzip2CompressionStrategy : creates
-CompressionStrategyFactory ..> XzCompressionStrategy : creates
-CompressionStrategyFactory ..> LzmaCompressionStrategy : creates
-
-note right of CompressionStrategyFactory
-  Centralizes creation; callers
-  depend on the ICompressionStrategy
-  interface, not the concrete
-  codec class. Adding a new codec
-  means adding one class + one
-  factory branch.
+note right of ICompressionStrategy
+  Classic **Strategy** pattern — each
+  algorithm wraps streams uniformly
+  so Tar extraction/writing is format
+  agnostic.
 end note
-
-note bottom of GzipCompressionStrategy
-  Uses java.util.zip.GZIPInputStream /
-  GZIPOutputStream — no external
-  dependency.
-end note
-
 @enduml
