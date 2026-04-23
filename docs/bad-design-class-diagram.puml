@@ -3,7 +3,6 @@ title WeeFsApp — Bad-Design Class Diagram
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
-hide empty members
 
 ' ─────────────────────────────────────────────────────────────────────
 ' PACKAGE: io.wfs.core.extractor
