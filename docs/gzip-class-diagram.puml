@@ -1,0 +1,73 @@
+@startuml
+title weefs — Compression / Gzip Module (core.extractor.compression)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+interface ICompressionStrategy <<Strategy>> {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class NoCompressionStrategy {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class GzipCompressionStrategy {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class Bzip2CompressionStrategy {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class XzCompressionStrategy {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class LzmaCompressionStrategy {
+  +wrapInput(input : InputStream) : InputStream
+  +wrapOutput(output : OutputStream) : OutputStream
+}
+
+class CompressionStrategyFactory <<Factory>> {
+  +{static} forName(name : String) : ICompressionStrategy
+  +{static} forExtension(ext : String) : ICompressionStrategy
+  +{static} gzip() : ICompressionStrategy
+  +{static} none() : ICompressionStrategy
+}
+
+ICompressionStrategy <|.. NoCompressionStrategy
+ICompressionStrategy <|.. GzipCompressionStrategy
+ICompressionStrategy <|.. Bzip2CompressionStrategy
+ICompressionStrategy <|.. XzCompressionStrategy
+ICompressionStrategy <|.. LzmaCompressionStrategy
+
+CompressionStrategyFactory ..> ICompressionStrategy : returns
+CompressionStrategyFactory ..> NoCompressionStrategy : creates
+CompressionStrategyFactory ..> GzipCompressionStrategy : creates
+CompressionStrategyFactory ..> Bzip2CompressionStrategy : creates
+CompressionStrategyFactory ..> XzCompressionStrategy : creates
+CompressionStrategyFactory ..> LzmaCompressionStrategy : creates
+
+note right of CompressionStrategyFactory
+  Centralizes creation; callers
+  depend on the ICompressionStrategy
+  interface, not the concrete
+  codec class. Adding a new codec
+  means adding one class + one
+  factory branch.
+end note
+
+note bottom of GzipCompressionStrategy
+  Uses java.util.zip.GZIPInputStream /
+  GZIPOutputStream — no external
+  dependency.
+end note
+
+@enduml

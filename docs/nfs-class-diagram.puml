@@ -1,0 +1,182 @@
+@startuml
+title weefs — NFS Module (core.nfs)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+interface IRemoteFileSystem <<abstraction>> {
+  +sftpConfig() : NfsSftpConfig
+  +hasSftpConfig() : boolean
+  +toRemotePath(path : NfsPath) : String
+  +ensureWritable() : void
+  +ensureWritableFor(opts : Set<? extends OpenOption>) : void
+  +ensureOpen() : void
+}
+
+class NfsFileSystem extends FileSystem {
+  -provider : NfsSftpFsProvider
+  -sftpConfig : NfsSftpConfig
+  -readOnly : boolean
+  -root : NfsPath
+  +getPath(first : String, more : String[]) : Path
+  +provider() : FileSystemProvider
+  +close() : void
+  +sftpConfig() : NfsSftpConfig
+  +toRemotePath(path : NfsPath) : String
+}
+IRemoteFileSystem <|.. NfsFileSystem
+
+class NfsPath implements Path {
+  -fs : NfsFileSystem
+  -segments : String[]
+  -absolute : boolean
+  +getFileSystem() : NfsFileSystem
+  +resolve(other : Path) : Path
+  +normalize() : Path
+  +toUri() : URI
+  +toString() : String
+}
+
+class NfsSftpFsProvider extends FileSystemProvider {
+  -fileSystems : Map<URI, NfsFileSystem>
+  +getScheme() : String
+  +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+  +getFileSystem(uri : URI) : FileSystem
+  +newByteChannel(path : Path, opts : Set<OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
+  +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
+  +delete(path : Path) : void
+  +copy(src : Path, tgt : Path, opts : CopyOption[]) : void
+  +move(src : Path, tgt : Path, opts : CopyOption[]) : void
+}
+
+class NfsFsProvider extends FileSystemProvider {
+  +getScheme() : String
+  +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+}
+
+class NfsSftpFsIO <<SFTP adapter>> {
+  -config : NfsSftpConfig
+  +withChannel(work : SftpWork<T>) : T
+  +list(remotePath : String) : List<RemoteEntry>
+  +stat(remotePath : String) : RemoteFileStat
+  +readAllBytes(remotePath : String) : byte[]
+  +write(remotePath : String, bytes : byte[]) : void
+  +mkdir(remotePath : String) : void
+  +rm(remotePath : String) : void
+  +rename(src : String, dst : String) : void
+}
+
+interface SftpWork<T> {
+  +run(channel : ChannelSftp) : T
+}
+NfsSftpFsIO +-- SftpWork
+NfsSftpFsIO +-- RemoteEntry
+NfsSftpFsIO +-- RemoteFileStat
+
+class RemoteEntry {
+  -name : String
+  -directory : boolean
+  -size : long
+  -mtime : long
+}
+class RemoteFileStat {
+  -size : long
+  -mtime : long
+  -directory : boolean
+  -exists : boolean
+}
+
+class NfsIO {
+  +readAttributes(path : NfsPath) : NfsBasicFileAttributes
+  +newByteChannel(path : NfsPath, opts : Set<OpenOption>) : SeekableByteChannel
+  +newDirectoryStream(path : NfsPath) : DirectoryStream<Path>
+}
+
+class NfsSyncingByteChannel implements SeekableByteChannel {
+  -fileSystem : NfsFileSystem
+  -path : NfsPath
+  -readable : boolean
+  -writable : boolean
+  -buffer : byte[]
+  -position : long
+  -dirty : boolean
+  +read(dst : ByteBuffer) : int
+  +write(src : ByteBuffer) : int
+  +position() : long
+  +truncate(size : long) : SeekableByteChannel
+  +close() : void
+}
+
+class NfsDirectoryStream implements DirectoryStream<Path> {
+  +iterator() : Iterator<Path>
+  +close() : void
+}
+class NfsDirectoryIterator implements Iterator<Path> {
+  +hasNext() : boolean
+  +next() : Path
+}
+class NfsPathIterator implements Iterator<Path> {
+  +hasNext() : boolean
+  +next() : Path
+}
+
+class NfsBasicFileAttributes implements BasicFileAttributes {
+  -size : long
+  -lastModified : FileTime
+  -directory : boolean
+  +size() : long
+  +isDirectory() : boolean
+}
+class NfsFileInfo {
+  -exists : boolean
+  -directory : boolean
+  -size : long
+  -mtime : long
+}
+class NfsConnectionConfig <<value>> {
+  -host : String
+  -port : int
+  -exportPath : String
+  -mountPath : String
+  -timeoutSeconds : int
+  -readOnly : boolean
+  +isReadOnly() : boolean
+}
+class NfsSftpConfig <<value>> {
+  -host : String
+  -port : int
+  -username : String
+  -password : String
+  -remoteRoot : String
+  -readOnly : boolean
+}
+class NfsParsedUri {
+  -host : String
+  -port : int
+  -exportPath : String
+  +{static} parse(uri : URI) : NfsParsedUri
+}
+
+class SftpArchiveServer {
+  -properties : SftpServerProperties
+  -mounts : List<ArchiveVfsMount>
+  +start() : void
+  +stop() : void
+}
+
+' Relationships
+NfsFileSystem --> NfsPath
+NfsFileSystem --> NfsSftpFsProvider
+NfsFileSystem --> NfsSftpConfig
+NfsSftpFsProvider --> NfsFileSystem
+NfsSftpFsProvider --> NfsSftpFsIO
+NfsSftpFsProvider --> NfsSyncingByteChannel
+NfsSyncingByteChannel --> NfsFileSystem
+NfsSyncingByteChannel --> NfsPath
+NfsIO --> NfsSftpFsIO
+NfsIO --> NfsBasicFileAttributes
+NfsDirectoryStream --> NfsDirectoryIterator
+NfsPath --> NfsFileSystem
+NfsParsedUri ..> NfsSftpConfig
+@enduml

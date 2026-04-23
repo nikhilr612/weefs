@@ -1,0 +1,119 @@
+@startuml
+title weefs — High-level Bad-Design (design-pattern / principle view)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+package "UI (MVC violated)" {
+  class ArchiveModel <<BAD: God object>> {
+    -archive : FileSystem
+    -archivePath : Path
+    -selectedFile : FileNode
+    -readOnly : boolean
+    -remoteMounted : boolean
+    -nfsConfig : NfsConnectionConfig
+    --
+    +openArchive(Path) : void
+    +setNfsConfig(NfsConnectionConfig) : void
+    +mountRemote(URI) : void
+    +closeArchive() : void
+  }
+  note right of ArchiveModel
+    Single class owns archive state,
+    NFS state and UI selection —
+    violates SRP.
+  end note
+
+  class ArchiveController <<BAD: duplicate state>> {
+    -model : ArchiveModel
+    -currentNfsConfig : NfsConnectionConfig
+    --
+    +extractSelected() : void
+    +getNfsFileOps() : NfsFileOperations
+  }
+  note right of ArchiveController
+    currentNfsConfig mirrors
+    model.getNfsConfig() — two
+    sources of truth.
+  end note
+
+  class NfsFileOperations <<BAD: concrete leak>>
+  interface INfsController
+  INfsController <|.. ArchiveController
+  ArchiveController --> NfsFileOperations : <<returns concrete>>
+}
+
+package "Core (OCP / DIP violated)" {
+  class FileSystemFactory <<BAD: OCP violation>> {
+    -drivers : Map<String, FileSystemDriver>
+    --
+    -registerDefaults() : void
+    +open(URI, Map) : FileSystem
+  }
+  note bottom of FileSystemFactory
+    registerDefaults() hard-codes
+    ZipFileSystemDriver / NfsFileSystemDriver —
+    new scheme requires modifying factory.
+  end note
+
+  interface FileSystemDriver
+  class ZipFileSystemDriver <<BAD: DIP violation>> {
+    -provider : ExtZipFsProvider
+    --
+    +ZipFileSystemDriver()
+  }
+  class NfsFileSystemDriver <<BAD: DIP violation>> {
+    -provider : NfsSftpFsProvider
+    --
+    +NfsFileSystemDriver()
+  }
+  note bottom of NfsFileSystemDriver
+    Driver directly "new"s its
+    provider — no injection,
+    untestable.
+  end note
+
+  FileSystemDriver <|.. ZipFileSystemDriver
+  FileSystemDriver <|.. NfsFileSystemDriver
+  FileSystemFactory --> FileSystemDriver
+}
+
+package "NFS (no pooling)" {
+  class NfsSftpFsIO <<BAD: no pooling>> {
+    -sessions : JSch
+    --
+    +withChannel(work) : T
+  }
+  note bottom of NfsSftpFsIO
+    Opens a new SSH session
+    per operation — expensive,
+    no connection reuse.
+  end note
+}
+
+package "Extractor (no strategy)" {
+  class Extractor <<BAD: monolithic>> {
+    --
+    +extractZip(...) : void
+    +extractTar(...) : void
+    +extractGz(...) : void
+  }
+  note bottom of Extractor
+    One class handles every
+    archive format with a
+    big if/else — violates
+    OCP & Strategy.
+  end note
+}
+
+ArchiveModel --> FileSystemFactory
+ArchiveController --> ArchiveModel
+ArchiveModel --> NfsSftpFsIO
+
+legend right
+  <<BAD: ...>> annotates concrete design issues
+  Numbers of arrows kept low to emphasize
+  structural anti-patterns, not every call.
+endlegend
+@enduml

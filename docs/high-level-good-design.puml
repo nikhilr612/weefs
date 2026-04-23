@@ -1,0 +1,146 @@
+@startuml
+title weefs — High-level Good-Design (design-pattern / principle view)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+package "UI (clean MVC)" {
+  class MainFrame
+  class ArchiveModel {
+    -sessions : List<MountSession>
+    -activeSession : MountSession
+    --
+    +addSession(MountSession) : void
+    +closeSession(String) : void
+    +setActiveSession(String) : void
+  }
+  class MountSession <<Value Object>> {
+    -id : String
+    -fileSystem : FileSystem
+    -displayPath : Path
+    -readOnly : boolean
+    -remoteMounted : boolean
+    -nfsConfig : NfsConnectionConfig
+    +isSaveable() : boolean
+  }
+  class RemoteMountManager <<Extract Class>>
+  class ClipboardEntry <<Value Object>> {
+    -sourceSessionId : String
+    -node : FileNode
+    -cut : boolean
+  }
+
+  interface IArchiveController
+  interface INfsController
+  class ArchiveController {
+    -model : ArchiveModel
+    -fileOps : IFileOperations
+    -nfsFileOps : IFileOperations
+    +getFileOps() : IFileOperations
+  }
+  IArchiveController <|.. ArchiveController
+  INfsController   <|.. ArchiveController
+
+  interface IFileOperations <<DIP>>
+  class FileOperations
+  class NfsFileOperations
+  IFileOperations <|.. FileOperations
+  IFileOperations <|.. NfsFileOperations
+
+  ArchiveModel "1" o-- "*" MountSession
+  ArchiveModel --> RemoteMountManager
+  ArchiveController --> ArchiveModel
+  ArchiveController --> IFileOperations
+  ArchiveController --> ClipboardEntry
+  MainFrame --> ArchiveController
+}
+
+package "Filesystem SPI (OCP / DIP respected)" {
+  interface FileSystemDriver <<SPI>> {
+    +scheme() : String
+    +open(URI, Map) : FileSystem
+  }
+  class FileSystemFactory <<Factory>> {
+    -drivers : Map<String, FileSystemDriver>
+    +register(FileSystemDriver) : void
+    +open(URI, Map) : FileSystem
+  }
+  class LocalFileSystemDriver
+  class ZipFileSystemDriver {
+    -provider : ExtZipFsProvider
+    +ZipFileSystemDriver(provider : ExtZipFsProvider)
+  }
+  class NfsFileSystemDriver {
+    -provider : NfsSftpFsProvider
+    +NfsFileSystemDriver(provider : NfsSftpFsProvider)
+  }
+  note top of FileSystemFactory
+    Open-Closed: add a new
+    scheme by providing another
+    FileSystemDriver — no
+    factory changes needed.
+  end note
+  note bottom of NfsFileSystemDriver
+    Provider injected via
+    constructor (DIP).
+  end note
+
+  FileSystemDriver <|.. LocalFileSystemDriver
+  FileSystemDriver <|.. ZipFileSystemDriver
+  FileSystemDriver <|.. NfsFileSystemDriver
+  FileSystemFactory o-- FileSystemDriver
+  ArchiveModel --> FileSystemFactory
+}
+
+package "Archive format (Strategy)" {
+  interface ArchiveFormat <<Strategy>> {
+    +supports(archiveFile : Path) : boolean
+    +extract(archiveFile : Path, targetRoot : Path) : void
+    +write(sourceRoot : Path, archiveFile : Path) : void
+  }
+  class TarArchiveFormat
+  class ZipArchiveFormat
+  class ArchiveFormats <<Registry>>
+  class ArchiveFormatDetector
+  ArchiveFormat <|.. TarArchiveFormat
+  ArchiveFormat <|.. ZipArchiveFormat
+  ArchiveFormats --> ArchiveFormat
+  ArchiveFormatDetector --> ArchiveFormats
+}
+
+package "Compression (Strategy + Factory)" {
+  interface ICompressionStrategy <<Strategy>> {
+    +wrapInput(in : InputStream) : InputStream
+    +wrapOutput(out : OutputStream) : OutputStream
+  }
+  class CompressionStrategyFactory <<Factory>>
+  class NoCompressionStrategy
+  class GzipCompressionStrategy
+  class Bzip2CompressionStrategy
+  class XzCompressionStrategy
+  class LzmaCompressionStrategy
+  ICompressionStrategy <|.. NoCompressionStrategy
+  ICompressionStrategy <|.. GzipCompressionStrategy
+  ICompressionStrategy <|.. Bzip2CompressionStrategy
+  ICompressionStrategy <|.. XzCompressionStrategy
+  ICompressionStrategy <|.. LzmaCompressionStrategy
+  CompressionStrategyFactory --> ICompressionStrategy
+}
+
+package "NFS (isolated transport)" {
+  interface IRemoteFileSystem
+  class NfsFsProvider
+  class NfsSftpFsProvider
+  class NfsSftpFsIO
+  NfsFileSystemDriver --> NfsSftpFsProvider
+  NfsSftpFsProvider --> NfsSftpFsIO
+  NfsFsProvider ..> IRemoteFileSystem
+}
+
+legend right
+  Shows the <<Strategy>>, <<Factory>>, <<SPI>>
+  and <<DIP>> seams introduced to fix the
+  bad-design anti-patterns (see high-level-bad-design).
+endlegend
+@enduml

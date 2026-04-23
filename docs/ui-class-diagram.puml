@@ -1,0 +1,167 @@
+@startuml
+title weefs — UI Module
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+package "ui.view" {
+  class MainFrame {
+    -model : ArchiveModel
+    -controller : ArchiveController
+    -treePanel : ArchiveTreePanel
+    -contentPanel : FileContentPanel
+    -statusBar : StatusBarPanel
+    +MainFrame(model : ArchiveModel, controller : ArchiveController)
+    -handleExit() : void
+  }
+  class ArchiveTreePanel {
+    -model : ArchiveModel
+    -controller : ArchiveController
+    -tree : JTree
+    -treeModel : DefaultTreeModel
+    +refresh() : void
+    -confirmAndClose(sessionId : String) : void
+    -showContextMenu(evt : MouseEvent) : void
+  }
+  class FileContentPanel {
+    -textArea : JTextArea
+    -hexView : JTextArea
+    +showFile(node : FileNode) : void
+  }
+  class StatusBarPanel {
+    -statusLabel : JLabel
+    -pathLabel : JLabel
+    +setStatus(text : String) : void
+  }
+  class ToolBarFactory {
+    +{static} build(controller : ArchiveController, model : ArchiveModel) : JToolBar
+  }
+  class MenuBarFactory {
+    +{static} build(frame : JFrame, controller : ArchiveController, model : ArchiveModel) : JMenuBar
+  }
+  class FileTreeCellRenderer {
+    +getTreeCellRendererComponent(...) : Component
+  }
+  package "ui.view.dialog" {
+    class AboutDialog
+    class PropertiesDialog
+  }
+}
+
+package "ui.controller" {
+  interface IArchiveController {
+    +openArchive(path : Path) : void
+    +openDirectory(path : Path) : void
+    +saveSession(id : String) : void
+    +closeSession(id : String) : void
+    +extractSelected(dest : Path) : void
+    +copySelected() : void
+    +cutSelected() : void
+    +pasteSelected() : void
+    +hasClipboard() : boolean
+  }
+  interface INfsController {
+    +mountNfs(config : NfsConnectionConfig) : void
+    +unmountNfs() : void
+    +getFileOps() : IFileOperations
+  }
+  interface IFileOperations {
+    +extractTo(src : FileNode, dest : Path) : void
+    +delete(path : Path) : void
+    +rename(path : Path, newName : String) : void
+    +createFile(parent : Path, name : String) : void
+    +createDirectory(parent : Path, name : String) : void
+    +copy(src : Path, dest : Path) : void
+    +saveFile(path : Path, bytes : byte[]) : void
+  }
+  class ArchiveController {
+    -model : ArchiveModel
+    -fileOps : FileOperations
+    -nfsFileOps : NfsFileOperations
+    -clipboard : ClipboardEntry
+    +getFileOps() : IFileOperations
+  }
+  class FileOperations
+  class NfsFileOperations {
+    -model : ArchiveModel
+    +setConfig(config : NfsConnectionConfig) : void
+    +getConfig() : NfsConnectionConfig
+  }
+  class NfsConnectionDialog
+  IArchiveController <|.. ArchiveController
+  INfsController   <|.. ArchiveController
+  IFileOperations  <|.. FileOperations
+  IFileOperations  <|.. NfsFileOperations
+}
+
+package "ui.model" {
+  class ArchiveModel {
+    -sessions : List<MountSession>
+    -activeSession : MountSession
+    -selectedFile : FileNode
+    -pcs : PropertyChangeSupport
+    +addSession(s : MountSession) : void
+    +closeSession(id : String) : void
+    +setActiveSession(id : String) : void
+    +getSessions() : List<MountSession>
+    +findSessionForPath(p : Path) : MountSession
+  }
+  class MountSession {
+    -id : String
+    -fileSystem : FileSystem
+    -displayPath : Path
+    -readOnly : boolean
+    -remoteMounted : boolean
+    -nfsConfig : NfsConnectionConfig
+    +isSaveable() : boolean
+    +close() : void
+  }
+  class FileNode {
+    -path : Path
+    -name : String
+    -directory : boolean
+    +compareTo(other : FileNode) : int
+  }
+  class RemoteMountManager {
+    -model : ArchiveModel
+    +setNfsConfig(cfg : NfsConnectionConfig) : void
+    +getNfsConfig() : NfsConnectionConfig
+    +isNfsMounted() : boolean
+  }
+  class ClipboardEntry {
+    -sourceSessionId : String
+    -node : FileNode
+    -cut : boolean
+  }
+  ArchiveModel "1" o-- "*" MountSession
+  ArchiveModel --> RemoteMountManager
+  ArchiveModel ..> ClipboardEntry
+}
+
+package "ui.util" {
+  class IconFactory
+  class FileTypeDetector
+  class SwingUtils
+  class UIUtils
+}
+
+' Wiring
+MainFrame --> ArchiveTreePanel
+MainFrame --> FileContentPanel
+MainFrame --> StatusBarPanel
+MainFrame --> ArchiveController
+MainFrame --> ArchiveModel
+ArchiveTreePanel --> ArchiveModel
+ArchiveTreePanel --> ArchiveController
+ArchiveTreePanel --> FileTreeCellRenderer
+FileContentPanel --> FileNode
+ToolBarFactory ..> ArchiveController
+MenuBarFactory ..> ArchiveController
+ArchiveController --> ArchiveModel
+ArchiveController --> IFileOperations
+ArchiveController --> ClipboardEntry
+ArchiveController --> NfsConnectionDialog
+FileTreeCellRenderer --> IconFactory
+FileContentPanel --> FileTypeDetector
+@enduml

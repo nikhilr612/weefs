@@ -37,8 +37,8 @@ class ZipFileSystemDriver {
 	+open(uri : URI, env : Map<String, ?>) : FileSystem
 }
 interface FileSystemDriver {
-	~scheme() : String
-	~open(uri : URI, env : Map<String, ?>) : FileSystem
+	+scheme() : String
+	+open(uri : URI, env : Map<String, ?>) : FileSystem
 }
 class LocalFileSystemDriver {
 	+scheme() : String
@@ -394,7 +394,7 @@ class RemoteFileStat {
 	~lastModifiedTime() : FileTime
 }
 interface SftpWork {
-	~run(channel : ChannelSftp) : T
+	+run(channel : ChannelSftp) : T
 }
 class NfsFileInfo {
 	-name : String
@@ -454,13 +454,13 @@ class NfsPath {
 	-{static} normalizeVirtualPath(raw : String) : String
 }
 interface IRemoteFileSystem {
-	~sftpConfig() : NfsSftpConfig
-	~hasSftpConfig() : boolean
-	~toRemotePath(path : NfsPath) : String
-	~ensureWritable() : void
-	~ensureWritableFor(options : Set<? extends OpenOption>) : void
-	~ensureOpen() : void
-	~fileSystem() : FileSystem
+	+sftpConfig() : NfsSftpConfig
+	+hasSftpConfig() : boolean
+	+toRemotePath(path : NfsPath) : String
+	+ensureWritable() : void
+	+ensureWritableFor(options : Set<? extends OpenOption>) : void
+	+ensureOpen() : void
+	+fileSystem() : FileSystem
 }
 class NfsDirectoryIterator {
 	-delegate : Iterator<Path>
@@ -572,9 +572,9 @@ enum ArchiveContainerType {
 	SINGLE_FILE
 }
 interface ArchiveFormat {
-	~supports(archiveFile : Path) : boolean
-	~extract(archiveFile : Path, targetRoot : Path) : void
-	~write(sourceRoot : Path, archiveFile : Path) : void
+	+supports(archiveFile : Path) : boolean
+	+extract(archiveFile : Path, targetRoot : Path) : void
+	+write(sourceRoot : Path, archiveFile : Path) : void
 }
 class ArchiveFormats {
 	-{static} FORMATS : List<ArchiveFormat>
@@ -678,8 +678,8 @@ class GzipCompressionStrategy {
 	+wrapOutput(output : OutputStream) : OutputStream
 }
 interface ICompressionStrategy {
-	~wrapInput(input : InputStream) : InputStream
-	~wrapOutput(output : OutputStream) : OutputStream
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
 }
 class LzmaCompressionStrategy {
 	+wrapInput(input : InputStream) : InputStream
@@ -925,13 +925,13 @@ class FileOperations {
 	-showError(operation : String, ex : Exception) : void
 }
 interface IFileOperations {
-	~createFile(path : Path, content : String) : boolean
-	~createDirectory(path : Path) : boolean
-	~delete(path : Path) : boolean
-	~rename(oldPath : Path, newPath : Path) : boolean
-	~saveFile(path : Path, content : String) : boolean
-	~extractTo(sourcePath : Path, destination : Path) : boolean
-	~copy(sourcePath : Path, targetDir : Path) : boolean
+	+createFile(path : Path, content : String) : boolean
+	+createDirectory(path : Path) : boolean
+	+delete(path : Path) : boolean
+	+rename(oldPath : Path, newPath : Path) : boolean
+	+saveFile(path : Path, content : String) : boolean
+	+extractTo(sourcePath : Path, destination : Path) : boolean
+	+copy(sourcePath : Path, targetDir : Path) : boolean
 }
 class NfsFileOperations {
 	-model : ArchiveModel
@@ -957,11 +957,11 @@ class NfsFileOperations {
 	-showError(title : String, ex : IOException) : void
 }
 interface INfsController {
-	~getNfsFileOps() : IFileOperations
-	~mountNfs() : void
-	~unmountNfs() : void
-	~extractNfsSelected() : void
-	~isNfsMounted() : boolean
+	+getNfsFileOps() : IFileOperations
+	+mountNfs() : void
+	+unmountNfs() : void
+	+extractNfsSelected() : void
+	+isNfsMounted() : boolean
 }
 class NfsConnectionDialog {
 	-hostField : JTextField
@@ -1035,27 +1035,27 @@ class ArchiveFormatOption {
 	-ArchiveFormatOption(label : String, requiredExtension : String, filterDescription : String, extensions : String)
 }
 interface IArchiveController {
-	~setParentComponent(parent : Component) : void
-	~getModel() : ArchiveModel
-	~getFileOps() : IFileOperations
-	~openDirectory() : void
-	~openArchive() : void
-	~mountNfs() : void
-	~createArchive() : void
-	~copySelected() : void
-	~cutSelected() : void
-	~pasteSelected() : void
-	~hasClipboard() : boolean
-	~closeSession(sessionId : String) : void
-	~saveSession(sessionId : String) : void
-	~closeArchive() : void
-	~saveArchive() : void
-	~newFile() : void
-	~newDirectory() : void
-	~deleteSelected() : void
-	~renameSelected() : void
-	~extractSelected() : void
-	~saveFileContent(path : Path, content : String) : void
+	+setParentComponent(parent : Component) : void
+	+getModel() : ArchiveModel
+	+getFileOps() : IFileOperations
+	+openDirectory() : void
+	+openArchive() : void
+	+mountNfs() : void
+	+createArchive() : void
+	+copySelected() : void
+	+cutSelected() : void
+	+pasteSelected() : void
+	+hasClipboard() : boolean
+	+closeSession(sessionId : String) : void
+	+saveSession(sessionId : String) : void
+	+closeArchive() : void
+	+saveArchive() : void
+	+newFile() : void
+	+newDirectory() : void
+	+deleteSelected() : void
+	+renameSelected() : void
+	+extractSelected() : void
+	+saveFileContent(path : Path, content : String) : void
 }
 class MenuBarFactory {
 	-MenuBarFactory()
@@ -1195,7 +1195,7 @@ class IconFactory {
 	+{static} archiveIcon() : Icon
 }
 interface IconPainter {
-	~paint(g : Graphics2D, width : int, height : int) : void
+	+paint(g : Graphics2D, width : int, height : int) : void
 }
 class PaintedIcon {
 	-width : int
@@ -1271,10 +1271,10 @@ class UiIntegrationTest {
 	-{static} assertionFailure(msg : String) : IllegalStateException
 }
 interface ModelAction {
-	~run(model : ArchiveModel) : void
+	+run(model : ArchiveModel) : void
 }
 interface TestBody {
-	~run(model : ArchiveModel, archivePath : Path) : void
+	+run(model : ArchiveModel, archivePath : Path) : void
 }
 class MountSession {
 	-id : String

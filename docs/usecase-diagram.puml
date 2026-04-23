@@ -1,0 +1,93 @@
+@startuml
+title weefs — Use Case Diagram
+
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+actor "User" as U
+actor "Remote SFTP Server" as SFTP
+actor "Local File System" as LFS
+
+rectangle "weefs" {
+
+  package "Mount Management" {
+    usecase "Open Archive\n(zip/tar)"    as UC_OPEN
+    usecase "Open Directory"             as UC_OPEN_DIR
+    usecase "Mount NFS over SFTP"        as UC_MOUNT_NFS
+    usecase "Open weefs:// URI"          as UC_OPEN_URI
+    usecase "Switch Active Mount"        as UC_SWITCH
+    usecase "Unmount / Close Session"    as UC_UNMOUNT
+    usecase "Save Mount"                 as UC_SAVE
+    usecase "Toggle Read-Only"           as UC_RO
+  }
+
+  package "Browse & View" {
+    usecase "Browse Tree"                as UC_BROWSE
+    usecase "View File Content"          as UC_VIEW
+    usecase "View File Properties"       as UC_PROPS
+    usecase "Detect Archive Format"      as UC_DETECT
+  }
+
+  package "File Operations" {
+    usecase "Extract File / Folder"      as UC_EXTRACT
+    usecase "Create File / Directory"    as UC_CREATE
+    usecase "Rename Entry"               as UC_RENAME
+    usecase "Delete Entry"               as UC_DELETE
+    usecase "Copy"                       as UC_COPY
+    usecase "Cut"                        as UC_CUT
+    usecase "Paste (cross-session)"      as UC_PASTE
+    usecase "Save Individual File"       as UC_SAVE_FILE
+  }
+
+  package "Customization" {
+    usecase "Toggle Dark / Light Theme"  as UC_THEME
+    usecase "View About Dialog"          as UC_ABOUT
+  }
+
+  package "Server Mode" {
+    usecase "Start SFTP Archive Server"  as UC_SERVER_START
+    usecase "Serve Archive to Clients"   as UC_SERVER_SERVE
+  }
+}
+
+U --> UC_OPEN
+U --> UC_OPEN_DIR
+U --> UC_MOUNT_NFS
+U --> UC_OPEN_URI
+U --> UC_SWITCH
+U --> UC_UNMOUNT
+U --> UC_SAVE
+U --> UC_RO
+U --> UC_BROWSE
+U --> UC_VIEW
+U --> UC_PROPS
+U --> UC_EXTRACT
+U --> UC_CREATE
+U --> UC_RENAME
+U --> UC_DELETE
+U --> UC_COPY
+U --> UC_CUT
+U --> UC_PASTE
+U --> UC_SAVE_FILE
+U --> UC_THEME
+U --> UC_ABOUT
+U --> UC_SERVER_START
+
+UC_MOUNT_NFS  ..> SFTP : <<communicates>>
+UC_OPEN_URI   ..> SFTP : <<may use>>
+UC_OPEN       ..> LFS  : <<reads>>
+UC_OPEN_DIR   ..> LFS  : <<reads>>
+UC_EXTRACT    ..> LFS  : <<writes>>
+UC_SAVE       ..> LFS  : <<writes>>
+UC_SAVE_FILE  ..> LFS  : <<writes>>
+UC_SERVER_SERVE ..> SFTP : <<exposes>>
+
+UC_OPEN        ..> UC_DETECT  : <<include>>
+UC_OPEN_URI    ..> UC_DETECT  : <<include>>
+UC_SAVE        ..> UC_BROWSE  : <<extend>>
+UC_PASTE       ..> UC_COPY    : <<extend>>
+UC_PASTE       ..> UC_CUT     : <<extend>>
+UC_SERVER_START ..> UC_SERVER_SERVE : <<include>>
+
+@enduml

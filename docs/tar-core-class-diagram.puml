@@ -1,0 +1,141 @@
+@startuml
+title weefs — TAR & Core Extractor Module (core.extractor)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+package "Archive Format (Strategy)" {
+  interface ArchiveFormat <<Strategy>> {
+    +supports(archiveFile : Path) : boolean
+    +extract(archiveFile : Path, targetRoot : Path) : void
+    +write(sourceRoot : Path, archiveFile : Path) : void
+  }
+
+  class TarArchiveFormat {
+    -compression : ICompressionStrategy
+    +TarArchiveFormat(compression : ICompressionStrategy)
+    +supports(archiveFile : Path) : boolean
+    +extract(archiveFile : Path, targetRoot : Path) : void
+    +write(sourceRoot : Path, archiveFile : Path) : void
+  }
+
+  class ZipArchiveFormat {
+    +supports(archiveFile : Path) : boolean
+    +extract(archiveFile : Path, targetRoot : Path) : void
+    +write(sourceRoot : Path, archiveFile : Path) : void
+  }
+
+  class ArchiveFormats <<Registry>> {
+    +{static} defaults() : List<ArchiveFormat>
+    +{static} detect(archiveFile : Path) : ArchiveFormat
+    +{static} register(format : ArchiveFormat) : void
+  }
+
+  class ArchiveFormatDetector {
+    +detect(archiveFile : Path) : ArchiveFormatInfo
+    -readMagic(archiveFile : Path, bytes : int) : byte[]
+  }
+
+  class ArchiveFormatInfo <<value>> {
+    -container : ArchiveContainerType
+    -compression : String
+    -displayName : String
+  }
+
+  enum ArchiveContainerType {
+    ZIP
+    TAR
+    GZIP
+    BZIP2
+    XZ
+    UNKNOWN
+  }
+
+  ArchiveFormat <|.. TarArchiveFormat
+  ArchiveFormat <|.. ZipArchiveFormat
+  ArchiveFormats --> ArchiveFormat
+  ArchiveFormatDetector --> ArchiveFormatInfo
+  ArchiveFormatInfo --> ArchiveContainerType
+}
+
+package "weefs:// FileSystem" {
+  class ExtZipFileSystem extends FileSystem {
+    -provider : ExtZipFsProvider
+    -inner : FileSystem
+    -root : ExtZipPath
+    -readOnly : boolean
+    +provider() : FileSystemProvider
+    +getPath(first : String, more : String[]) : Path
+    +close() : void
+  }
+
+  class ExtZipFsProvider extends FileSystemProvider {
+    -fileSystems : Map<URI, ExtZipFileSystem>
+    +getScheme() : String
+    +newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+    +getFileSystem(uri : URI) : FileSystem
+    +newByteChannel(path : Path, opts : Set<OpenOption>, attrs : FileAttribute<?>[]) : SeekableByteChannel
+    +newDirectoryStream(dir : Path, f : Filter<? super Path>) : DirectoryStream<Path>
+    +delete(path : Path) : void
+  }
+
+  class ExtZipPath implements Path {
+    -fs : ExtZipFileSystem
+    -segments : String[]
+    +getFileName() : Path
+    +resolve(other : Path) : Path
+    +toUri() : URI
+  }
+
+  class ExtZipFsIO {
+    +read(path : ExtZipPath) : byte[]
+    +write(path : ExtZipPath, bytes : byte[]) : void
+    +list(path : ExtZipPath) : List<ExtZipPath>
+  }
+
+  class ExtZipDirectoryStream implements DirectoryStream<Path> {
+    +iterator() : Iterator<Path>
+    +close() : void
+  }
+  class ExtZipDirectoryIterator implements Iterator<Path> {
+    +hasNext() : boolean
+    +next() : Path
+  }
+  class ExtZipPathIterator implements Iterator<Path> {
+    +hasNext() : boolean
+    +next() : Path
+  }
+  class ExtZipParsedUri {
+    -underlying : URI
+    -innerScheme : String
+    +{static} parse(uri : URI) : ExtZipParsedUri
+  }
+
+  ExtZipFileSystem --> ExtZipFsProvider
+  ExtZipFileSystem --> ExtZipPath
+  ExtZipFsProvider --> ExtZipFileSystem
+  ExtZipFsProvider --> ExtZipFsIO
+  ExtZipDirectoryStream --> ExtZipDirectoryIterator
+  ExtZipPath --> ExtZipFileSystem
+  ExtZipParsedUri ..> ExtZipFileSystem
+}
+
+package "Utility" {
+  class FileUtils {
+    +{static} deleteRecursively(root : Path) : void
+  }
+}
+
+' Cross-package wiring
+TarArchiveFormat ..> "core.extractor.compression.ICompressionStrategy" : uses
+ExtZipFsProvider ..> ArchiveFormats : resolves
+ExtZipFsIO ..> FileUtils
+
+legend right
+  TarArchiveFormat is parameterised
+  by an ICompressionStrategy (gzip,
+  bzip2, xz, lzma, none) — see
+  gzip-class-diagram.
+endlegend
+@enduml
