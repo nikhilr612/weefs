@@ -169,9 +169,7 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
   MountSession --> NfsConnectionConfig
   ClipboardEntry --> FileNode
   NfsConnectionDialog ..> NfsConnectionConfig
-
-' =====================================================================
-' Filesystem SPI — OCP/DIP restored
+}
 ' =====================================================================
 package "Filesystem SPI (OCP + DIP)" #E8F5E9 {
 
@@ -300,6 +298,16 @@ package "NFS (isolated transport)" #E8F5E9 {
     depend on the interface, not JSch.
   end note
 }
+
+' =====================================================================
+' Cross-package wiring
+' =====================================================================
+FileOperations ..> ArchiveFormats : <<extract/write>>
+ArchiveFormats ..> ICompressionStrategy : <<Tar wraps via>>
+ExtZipFileSystem ..> ICompressionStrategy : <<Zip entry wraps via>>
+ExtZipFileSystem ..> ArchiveFormats
+NfsFileSystem --> NfsFileSystemDriver : <<produced by>>
+ExtZipFsProvider --> ZipFileSystemDriver : <<produced by>>
 
 ' =====================================================================
 ' Transition summary

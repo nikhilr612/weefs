@@ -219,6 +219,10 @@ ArchiveController --> NfsFileOperations
 ArchiveController --> FileOperations
 ArchiveController ..> Extractor
 MainFrame --> ArchiveController
+Extractor ..> AdHocGzipUsage : <<inline branching>>
+FileOperations ..> Extractor : <<delegates to>>
+ExtZipFileSystem ..> Extractor : <<reuses>>
+NfsSftpFsProvider --> NfsSftpFsIO : <<news per op>>
 
 ' =====================================================================
 ' Legend
