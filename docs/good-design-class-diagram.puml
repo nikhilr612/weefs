@@ -1,431 +1,1528 @@
 @startuml
-title WeeFsApp — Good Design Class Diagram
-
 skinparam classAttributeIconSize 0
+title Good Design — full class diagram (all classes, relationships)
 skinparam linetype ortho
-skinparam packageStyle rectangle
+hide empty members
 
-' ═══════════════════════════════════════════════════════════════════════
-'  CORE · EXTRACTOR  (format Strategy + detection)
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.core.extractor" {
-
-  interface ArchiveFormat <<Strategy>> {
-    +supports(Path) : boolean
-    +extract(Path, Path) : void
-    +write(Path, Path) : void
-  }
-
-  class ZipArchiveFormat {
-    +supports(Path) : boolean
-    +extract(Path, Path) : void
-    +write(Path, Path) : void
-  }
-
-  class TarArchiveFormat {
-    -compressionFactory : CompressionStrategyFactory
-    +supports(Path) : boolean
-    +extract(Path, Path) : void
-    +write(Path, Path) : void
-  }
-
-  class ArchiveFormats {
-    +{static} all() : List<ArchiveFormat>
-    +{static} forPath(Path) : Optional<ArchiveFormat>
-  }
-
-  class ExtZipFsProvider {
-    +getScheme() : String
-    +newFileSystem(URI, Map) : FileSystem
-  }
+class FileUtils {
+	-FileUtils()
+	+{static} deleteRecursively(root : Path) : void
+}
+class NfsFileSystemDriver {
+	-provider : NfsSftpFsProvider
+	~NfsFileSystemDriver()
+	~NfsFileSystemDriver(provider : NfsSftpFsProvider)
+	+scheme() : String
+	+open(uri : URI, env : Map<String, ?>) : FileSystem
+}
+class FileSystemFactory {
+	-drivers : ConcurrentMap<String, FileSystemDriver>
+	+FileSystemFactory()
+	+register(driver : FileSystemDriver) : void
+	+registerDriver(scheme : String, driver : FileSystemDriver) : void
+	+open(uri : URI, env : Map<String, ?>) : FileSystem
+	+supportedSchemes() : List<String>
+	-registerDefaults() : void
+	-{static} normalizeScheme(scheme : String) : String
+}
+class FsEnvKeys {
+	+{static} READ_ONLY : String
+	-FsEnvKeys()
+}
+class ZipFileSystemDriver {
+	-provider : ExtZipFsProvider
+	~ZipFileSystemDriver()
+	~ZipFileSystemDriver(provider : ExtZipFsProvider)
+	+scheme() : String
+	+open(uri : URI, env : Map<String, ?>) : FileSystem
+}
+interface FileSystemDriver {
+	~scheme() : String
+	~open(uri : URI, env : Map<String, ?>) : FileSystem
+}
+class LocalFileSystemDriver {
+	+scheme() : String
+	+open(uri : URI, env : Map<String, ?>) : FileSystem
+}
+class NfsConnectionConfig {
+	-host : String
+	-port : int
+	-exportPath : String
+	-mountPath : String
+	-timeoutSeconds : int
+	-readOnly : boolean
+	+NfsConnectionConfig(host : String, port : int, exportPath : String, mountPath : String, timeoutSeconds : int, readOnly : boolean)
+	-{static} validateHost(host : String) : String
+	-{static} validatePath(path : String, name : String) : String
+	-{static} validatePort(port : int) : int
+	-{static} validateTimeout(timeout : int) : int
+	+getHost() : String
+	+getPort() : int
+	+getExportPath() : String
+	+getMountPath() : String
+	+getTimeoutSeconds() : int
+	+isReadOnly() : boolean
+	+toString() : String
+	+equals(o : Object) : boolean
+	+hashCode() : int
+}
+class NfsSyncingByteChannel {
+	-fileSystem : NfsFileSystem
+	-path : NfsPath
+	-readable : boolean
+	-writable : boolean
+	-buffer : byte[]
+	-size : int
+	-position : long
+	-dirty : boolean
+	-open : boolean
+	~NfsSyncingByteChannel(fileSystem : NfsFileSystem, path : NfsPath, readable : boolean, writable : boolean, initialContent : byte[], appendMode : boolean, initiallyDirty : boolean)
+	+read(dst : ByteBuffer) : int
+	+write(src : ByteBuffer) : int
+	+position() : long
+	+position(newPosition : long) : SeekableByteChannel
+	+size() : long
+	+truncate(size : long) : SeekableByteChannel
+	+isOpen() : boolean
+	+close() : void
+	-ensureOpen() : void
+	-ensureCapacity(minCapacity : int) : void
+}
+class NfsSftpConfig {
+	-host : String
+	-port : int
+	-username : String
+	-password : String
+	-remoteRoot : String
+	-authEnvVar : String
+	~NfsSftpConfig(host : String, port : int, username : String, password : String, remoteRoot : String, authEnvVar : String)
+	~host() : String
+	~port() : int
+	~username() : String
+	~password() : String
+	~remoteRoot() : String
+	~authEnvVar() : String
+}
+class NfsSftpFsProvider {
+	-mounted : Map<String, NfsFileSystem>
+	+getScheme() : String
+	+newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+	+getFileSystem(uri : URI) : FileSystem
+	+getPath(uri : URI) : Path
+	+newByteChannel(path : Path, options : Set<? extends OpenOption>, attrs : FileAttribute<?>) : SeekableByteChannel
+	+newDirectoryStream(dir : Path, filter : DirectoryStream.Filter<? super Path>) : DirectoryStream<Path>
+	+createDirectory(dir : Path, attrs : FileAttribute<?>) : void
+	+delete(path : Path) : void
+	+copy(source : Path, target : Path, options : CopyOption) : void
+	+move(source : Path, target : Path, options : CopyOption) : void
+	+isSameFile(path : Path, path2 : Path) : boolean
+	+isHidden(path : Path) : boolean
+	+getFileStore(path : Path) : FileStore
+	+checkAccess(path : Path, modes : AccessMode) : void
+	+getFileAttributeView(path : Path, type : Class<V>, options : LinkOption) : V
+	+readAttributes(path : Path, type : Class<A>, options : LinkOption) : A
+	+readAttributes(path : Path, attributes : String, options : LinkOption) : Map<String, Object>
+	+setAttribute(path : Path, attribute : String, value : Object, options : LinkOption) : void
+	~unregister(fs : NfsFileSystem) : void
+	-{static} toMountKey(username : String, host : String, port : int, remoteRoot : String) : String
+	-findMountedFor(parsed : NfsParsedUri) : NfsFileSystem
+	-{static} toInternalPath(remoteRoot : String, requestedPath : String) : String
+	-{static} joinVirtual(parent : String, child : String) : String
+	-{static} requireNfsPath(path : Path) : NfsPath
+	-{static} resolveOpenOptions(options : Set<? extends OpenOption>) : Set<StandardOpenOption>
+	-{static} hasReplaceExisting(options : CopyOption) : boolean
+}
+class NfsPathIterator {
+	-fileSystem : NfsFileSystem
+	-delegate : Iterator<Path>
+	~NfsPathIterator(fileSystem : NfsFileSystem, delegate : Iterator<Path>)
+	+hasNext() : boolean
+	+next() : Path
+}
+class CoreNfsPathTest {
+	-CoreNfsPathTest()
+	+{static} run() : void
+	-{static} createFs(readOnly : boolean) : NfsFileSystem
+	-{static} testPathNormalization() : void
+	-{static} testPathIsAbsolute() : void
+	-{static} testPathGetRoot() : void
+	-{static} testPathGetFileName() : void
+	-{static} testPathGetFileNameRoot() : void
+	-{static} testPathGetParent() : void
+	-{static} testPathGetParentRoot() : void
+	-{static} testPathGetNameCount() : void
+	-{static} testPathGetName() : void
+	-{static} testPathSubpath() : void
+	-{static} testPathStartsWith() : void
+	-{static} testPathEndsWith() : void
+	-{static} testPathResolveAbsolute() : void
+	-{static} testPathResolveRelative() : void
+	-{static} testPathResolveFromRoot() : void
+	-{static} testPathResolveString() : void
+	-{static} testPathResolveSibling() : void
+	-{static} testPathToAbsolutePath() : void
+	-{static} testPathRelativizeThrows() : void
+	-{static} testPathToUriThrows() : void
+	-{static} testPathToFileThrows() : void
+	-{static} testPathIterator() : void
+	-{static} testPathCompareTo() : void
+	-{static} testPathEqualsAndHashCode() : void
+	-{static} testPathToString() : void
+	-{static} testFileSystemIsOpen() : void
+	-{static} testFileSystemClose() : void
+	-{static} testFileSystemCloseIdempotent() : void
+	-{static} testFileSystemIsReadOnly() : void
+	-{static} testFileSystemGetSeparator() : void
+	-{static} testFileSystemGetRootDirectories() : void
+	-{static} testFileSystemGetPath() : void
+	-{static} testFileSystemGetPathMultiPart() : void
+	-{static} testFileSystemEnsureOpenWhenClosed() : void
+	-{static} testFileSystemEnsureWritableWhenReadOnly() : void
+	-{static} testFileSystemNewWatchServiceThrows() : void
+	-{static} testFileInfoConstruction() : void
+	-{static} testFileInfoGetExtension() : void
+	-{static} testFileInfoGetExtensionNoDot() : void
+	-{static} testFileInfoGetExtensionDotFile() : void
+	-{static} testFileInfoToStringDir() : void
+	-{static} testFileInfoToStringFile() : void
+	-{static} testFileInfoEqualsAndHash() : void
+	-{static} testFileInfoFromPath() : void
+	-{static} expectException(action : Runnable, expected : Class<? extends Throwable>) : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} assertEqual(expected : int, actual : int, context : String) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class NfsParsedUri {
+	-host : String
+	-port : int
+	-remotePath : String
+	-authEnvVar : String
+	-username : String
+	~NfsParsedUri(host : String, port : int, remotePath : String, authEnvVar : String, username : String)
+	~host() : String
+	~port() : int
+	~remotePath() : String
+	~authEnvVar() : String
+	~username() : String
+	~{static} parse(uri : URI, expectedScheme : String) : NfsParsedUri
+	-{static} parseQuery(rawQuery : String) : Map<String, String>
+	-{static} decode(value : String) : String
+	-{static} trimOrNull(value : String) : String
+	-{static} parseUsernameFromUserInfo(userInfo : String) : String
+}
+class NfsDirectoryStream {
+	-entries : List<Path>
+	-filter : Filter<? super Path>
+	-open : boolean
+	~NfsDirectoryStream(entries : List<Path>, filter : Filter<? super Path>)
+	+iterator() : Iterator<Path>
+	+close() : void
+}
+class SftpArchiveServer {
+	-{static} DEFAULT_ARCHIVE : String
+	-{static} DEFAULT_PORT : int
+	-{static} DEFAULT_USERNAME : String
+	-{static} DEFAULT_PASSWORD : String
+	-archivePath : Path
+	-port : int
+	-username : String
+	-password : String
+	-hostKeyPath : Path
+	-mountedArchiveFs : FileSystem
+	-sshServer : SshServer
+	-SftpArchiveServer(archivePath : Path, port : int, username : String, password : String)
+	+{static} main(args : String[]) : void
+	-start() : void
+	-{static} buildIsolatedFileSystemFactory(archiveFs : FileSystem) : FileSystemFactory
+	-{static} extractArchiveTempRoot(archiveFs : FileSystem) : Path
+	-{static} seedTestFile(archiveFs : FileSystem) : void
+	-stopQuietly() : void
+	-stop() : void
+	-buildAuthenticator() : PasswordAuthenticator
+	-{static} ensureArchiveZipExists(archive : Path) : void
+	-{static} mountArchive(archive : Path) : FileSystem
+	-{static} toXzipRootUri(archive : Path) : String
+	-{static} buildSftpSubsystemFactories() : List<SubsystemFactory>
+	-{static} attachEventLogging(builder : Object, builderType : Class<?>) : void
+	-{static} isInterestingOperation(op : String) : boolean
+	-{static} normalizeOperation(methodName : String) : String
+	-{static} extractPath(args : Object[]) : String
+	-{static} extractThrowable(args : Object[]) : Throwable
+	-{static} summarize(methodName : String, args : Object[]) : String
+	-{static} log(operation : String, path : String, message : String) : void
+	-{static} logError(operation : String, path : String, error : Throwable) : void
+}
+class Args {
+	-archivePath : Path
+	-port : int
+	-username : String
+	-password : String
+	~{static} parse(rawArgs : String[]) : Args
+	-{static} parsePort(value : String) : int
+}
+class ArchiveFileSystemFactory {
+	-shared : FileSystem
+	-ArchiveFileSystemFactory(shared : FileSystem)
+	+createFileSystem(session : SessionContext) : FileSystem
+	+getUserHomeDir(session : SessionContext) : Path
+}
+class NfsIO {
+	-NfsIO()
+	+{static} verifyConnection(config : NfsConnectionConfig) : void
+	+{static} listDirectory(config : NfsConnectionConfig, remotePath : String) : List<NfsFileInfo>
+	+{static} readFile(config : NfsConnectionConfig, remotePath : String) : byte[]
+	+{static} writeFile(config : NfsConnectionConfig, remotePath : String, content : byte[]) : void
+	+{static} createDirectory(config : NfsConnectionConfig, remotePath : String) : void
+	+{static} delete(config : NfsConnectionConfig, remotePath : String) : void
+	+{static} rename(config : NfsConnectionConfig, oldPath : String, newPath : String) : void
+	+{static} copy(config : NfsConnectionConfig, sourcePath : String, destPath : String) : void
+	+{static} disconnect(config : NfsConnectionConfig) : void
+	-{static} getCachePath(config : NfsConnectionConfig) : Path
+	-{static} sanitizePathComponent(input : String) : String
+	-{static} normalizePath(path : String) : String
+	-{static} deleteRecursively(root : Path) : void
+}
+class NfsFsProvider {
+	-{static} SCHEME : String
+	-mounted : Map<String, NfsFileSystem>
+	+getScheme() : String
+	+newFileSystem(path : Path, env : Map<String, ?>) : FileSystem
+	+newFileSystem(uri : java.net.URI, env : Map<String, ?>) : FileSystem
+	+getFileSystem(uri : java.net.URI) : FileSystem
+	+getPath(uri : java.net.URI) : Path
+	+newByteChannel(path : Path, options : Set<? extends OpenOption>, attrs : FileAttribute<?>) : SeekableByteChannel
+	+newDirectoryStream(dir : Path, filter : DirectoryStream.Filter<? super Path>) : DirectoryStream<Path>
+	+createDirectory(dir : Path, attrs : FileAttribute<?>) : void
+	+delete(path : Path) : void
+	+readAttributes(path : Path, type : Class<A>, options : LinkOption) : A
+	+readAttributes(path : Path, attributes : String, options : LinkOption) : Map<String, Object>
+	+setAttribute(path : Path, attribute : String, value : Object, options : LinkOption) : void
+	+getFileAttributeView(path : Path, type : Class<V>, options : LinkOption) : V
+	+copy(source : Path, target : Path, options : CopyOption) : void
+	+move(source : Path, target : Path, options : CopyOption) : void
+	+isSameFile(path : Path, path2 : Path) : boolean
+	+isHidden(path : Path) : boolean
+	+getFileStore(path : Path) : FileStore
+	+checkAccess(path : Path, modes : AccessMode) : void
+	-{static} castPath(path : Path) : NfsPath
+	-{static} parseUri(uri : java.net.URI, env : Map<String, ?>) : NfsConnectionConfig
+	-{static} configKey(config : NfsConnectionConfig) : String
+	-{static} parseBoolean(env : Map<String, ?>, key : String, defaultValue : boolean) : boolean
+	-{static} parseInt(env : Map<String, ?>, key : String, defaultValue : int) : int
+}
+class NfsWritableByteChannel {
+	-config : NfsConnectionConfig
+	-remotePath : String
+	-buf : java.io.ByteArrayOutputStream
+	-closed : boolean
+	-position : long
+	~NfsWritableByteChannel(config : NfsConnectionConfig, remotePath : String)
+	+read(dst : ByteBuffer) : int
+	+write(src : ByteBuffer) : int
+	+position() : long
+	+position(newPosition : long) : SeekableByteChannel
+	+size() : long
+	+truncate(size : long) : SeekableByteChannel
+	+isOpen() : boolean
+	+close() : void
+}
+class ByteArraySeekableByteChannel {
+	-buffer : ByteBuffer
+	-closed : boolean
+	~ByteArraySeekableByteChannel(data : byte[])
+	+read(dst : ByteBuffer) : int
+	+write(src : ByteBuffer) : int
+	+position() : long
+	+position(newPosition : long) : SeekableByteChannel
+	+size() : long
+	+truncate(size : long) : SeekableByteChannel
+	+isOpen() : boolean
+	+close() : void
+}
+class NfsSftpFsIO {
+	-{static} SFTP_CONNECT_TIMEOUT_MS : int
+	-NfsSftpFsIO()
+	~{static} ensureMountRootExists(config : NfsSftpConfig) : void
+	~{static} listDirectory(config : NfsSftpConfig, remoteDirectory : String) : List<RemoteEntry>
+	~{static} stat(config : NfsSftpConfig, remotePath : String) : RemoteFileStat
+	~{static} lstat(config : NfsSftpConfig, remotePath : String) : RemoteFileStat
+	~{static} exists(config : NfsSftpConfig, remotePath : String) : boolean
+	~{static} readFile(config : NfsSftpConfig, remotePath : String) : byte[]
+	~{static} writeFile(config : NfsSftpConfig, remotePath : String, content : byte[], createParents : boolean) : void
+	~{static} createFile(config : NfsSftpConfig, remotePath : String, failIfExists : boolean) : void
+	~{static} createDirectory(config : NfsSftpConfig, remoteDirectory : String) : void
+	~{static} deleteFile(config : NfsSftpConfig, remoteFile : String) : void
+	~{static} deleteDirectory(config : NfsSftpConfig, remoteDirectory : String) : void
+	~{static} move(config : NfsSftpConfig, sourcePath : String, targetPath : String) : void
+	~{static} copyFile(config : NfsSftpConfig, sourcePath : String, targetPath : String) : void
+	~{static} readBasicAttributesMap(config : NfsSftpConfig, remotePath : String) : Map<String, Object>
+	~{static} withChannel(config : NfsSftpConfig, work : SftpWork<T>) : T
+	-{static} mapSftpException(ex : SftpException) : IOException
+	-{static} ensureRemoteParentDirectories(channel : ChannelSftp, remotePath : String) : void
+	-{static} mkdirs(channel : ChannelSftp, absolutePath : String) : void
+	-{static} lstatOrNull(channel : ChannelSftp, remotePath : String) : SftpATTRS
+	-{static} statFollowLinksOrNull(channel : ChannelSftp, remotePath : String) : SftpATTRS
+	-{static} safeList(channel : ChannelSftp, path : String) : List<ChannelSftp.LsEntry>
+	~{static} join(base : String, child : String) : String
+	~{static} normalizeRemotePath(raw : String) : String
+	-{static} toFileTime(attrs : SftpATTRS) : FileTime
+	-{static} resolveStrictHostKeyChecking() : String
+	-{static} configureKnownHosts(jsch : JSch) : void
+}
+class RemoteEntry {
+	-name : String
+	-directory : boolean
+	-symbolicLink : boolean
+	-size : long
+	-lastModifiedTime : FileTime
+	~RemoteEntry(name : String, directory : boolean, symbolicLink : boolean, size : long, lastModifiedTime : FileTime)
+	~name() : String
+	~directory() : boolean
+	~symbolicLink() : boolean
+	~size() : long
+	~lastModifiedTime() : FileTime
+}
+class RemoteFileStat {
+	-directory : boolean
+	-symbolicLink : boolean
+	-size : long
+	-lastModifiedTime : FileTime
+	~RemoteFileStat(directory : boolean, symbolicLink : boolean, size : long, lastModifiedTime : FileTime)
+	~directory() : boolean
+	~symbolicLink() : boolean
+	~size() : long
+	~lastModifiedTime() : FileTime
+}
+interface SftpWork {
+	~run(channel : ChannelSftp) : T
+}
+class NfsFileInfo {
+	-name : String
+	-fullPath : String
+	-directory : boolean
+	-size : long
+	-lastModified : long
+	+NfsFileInfo(name : String, fullPath : String, directory : boolean, size : long, lastModified : long)
+	~{static} fromPath(path : Path) : NfsFileInfo
+	+getName() : String
+	+getFullPath() : String
+	+isDirectory() : boolean
+	+getSize() : long
+	+getLastModified() : long
+	+getExtension() : String
+	+toString() : String
+	+equals(o : Object) : boolean
+	+hashCode() : int
+}
+class NfsPath {
+	-fileSystem : NfsFileSystem
+	-virtualPath : String
+	-delegate : Path
+	~NfsPath(fileSystem : NfsFileSystem, virtualPath : String)
+	~getNfsFileSystem() : NfsFileSystem
+	~virtualPath() : String
+	-requireSameProvider(path : Path) : NfsPath
+	-toVirtualString() : String
+	+getFileSystem() : NfsFileSystem
+	+isAbsolute() : boolean
+	+getRoot() : Path
+	+getFileName() : Path
+	+getParent() : Path
+	+getNameCount() : int
+	+getName(index : int) : Path
+	+subpath(beginIndex : int, endIndex : int) : Path
+	+startsWith(other : Path) : boolean
+	+startsWith(other : String) : boolean
+	+endsWith(other : Path) : boolean
+	+endsWith(other : String) : boolean
+	+normalize() : Path
+	+resolve(other : Path) : Path
+	+resolve(other : String) : Path
+	+resolveSibling(other : Path) : Path
+	+resolveSibling(other : String) : Path
+	+relativize(other : Path) : Path
+	+toUri() : URI
+	+toAbsolutePath() : Path
+	+toRealPath(options : LinkOption) : Path
+	+toFile() : File
+	+register(watcher : WatchService, events : WatchEvent.Kind<?>[], modifiers : WatchEvent.Modifier) : WatchKey
+	+iterator() : Iterator<Path>
+	+compareTo(other : Path) : int
+	+toString() : String
+	+equals(obj : Object) : boolean
+	+hashCode() : int
+	-{static} normalizeVirtualPath(raw : String) : String
+}
+interface IRemoteFileSystem {
+	~sftpConfig() : NfsSftpConfig
+	~hasSftpConfig() : boolean
+	~toRemotePath(path : NfsPath) : String
+	~ensureWritable() : void
+	~ensureWritableFor(options : Set<? extends OpenOption>) : void
+	~ensureOpen() : void
+	~fileSystem() : FileSystem
+}
+class NfsDirectoryIterator {
+	-delegate : Iterator<Path>
+	-filter : DirectoryStream.Filter<? super Path>
+	-next : Path
+	-prepared : boolean
+	~NfsDirectoryIterator(delegate : Iterator<Path>, filter : DirectoryStream.Filter<? super Path>)
+	+hasNext() : boolean
+	+next() : Path
+}
+class NfsBasicFileAttributes {
+	-directory : boolean
+	-symbolicLink : boolean
+	-size : long
+	-lastModifiedTime : FileTime
+	~NfsBasicFileAttributes(directory : boolean, symbolicLink : boolean, size : long, lastModifiedTime : FileTime)
+	+lastModifiedTime() : FileTime
+	+lastAccessTime() : FileTime
+	+creationTime() : FileTime
+	+isRegularFile() : boolean
+	+isDirectory() : boolean
+	+isSymbolicLink() : boolean
+	+isOther() : boolean
+	+size() : long
+	+fileKey() : Object
+}
+class NfsFileSystem {
+	-provider : FileSystemProvider
+	-sftpProvider : NfsSftpFsProvider
+	-config : NfsSftpConfig
+	-legacyConfig : NfsConnectionConfig
+	-readOnly : boolean
+	-open : AtomicBoolean
+	-shutdownHook : Thread
+	~NfsFileSystem(provider : NfsSftpFsProvider, config : NfsSftpConfig, readOnly : boolean)
+	~NfsFileSystem(provider : NfsFsProvider, config : NfsConnectionConfig)
+	~installShutdownHook() : void
+	~config() : NfsSftpConfig
+	+sftpConfig() : NfsSftpConfig
+	+hasSftpConfig() : boolean
+	+fileSystem() : FileSystem
+	~getConfig() : NfsConnectionConfig
+	+toRemotePath(path : NfsPath) : String
+	+ensureWritable() : void
+	+ensureWritableFor(options : Set<? extends OpenOption>) : void
+	+ensureOpen() : void
+	+provider() : FileSystemProvider
+	+close() : void
+	+isOpen() : boolean
+	+isReadOnly() : boolean
+	+getSeparator() : String
+	+getRootDirectories() : Iterable<Path>
+	+getFileStores() : Iterable<FileStore>
+	+supportedFileAttributeViews() : Set<String>
+	+getPath(first : String, more : String) : Path
+	+getPathMatcher(syntaxAndPattern : String) : PathMatcher
+	+getUserPrincipalLookupService() : UserPrincipalLookupService
+	+newWatchService() : WatchService
+	-closeQuietly() : void
+}
+class ExtZipParsedUri {
+	-archivePart : String
+	-entryPart : String
+	~ExtZipParsedUri(archivePart : String, entryPart : String)
+	~archivePart() : String
+	~entryPart() : String
+	~{static} parse(uri : URI, expectedScheme : String) : ExtZipParsedUri
+}
+class ArchiveFormatInfo {
+	-containerType : ArchiveContainerType
+	-compressionKey : String
+	~ArchiveFormatInfo(containerType : ArchiveContainerType, compressionKey : String)
+	~containerType() : ArchiveContainerType
+	~compressionKey() : String
+}
+class ExtZipFsIO {
+	-ExtZipFsIO()
+	~{static} extractArchiveToDirectory(archiveFile : Path, targetRoot : Path) : void
+	~{static} extractZipToDirectory(zipArchive : Path, targetRoot : Path) : void
+	~{static} extractTarToDirectory(tarArchive : Path, targetRoot : Path, compressionKey : String) : void
+	~{static} writeDirectoryToArchive(sourceRoot : Path, archiveFile : Path) : void
+	~{static} writeDirectoryToZip(sourceRoot : Path, archiveFile : Path) : void
+	~{static} writeDirectoryToTar(sourceRoot : Path, archiveFile : Path, compressionKey : String) : void
+	~{static} extractSingleFileArchiveToDirectory(archiveFile : Path, targetRoot : Path, compressionKey : String) : void
+	~{static} writeDirectoryToSingleFileArchive(sourceRoot : Path, archiveFile : Path, compressionKey : String) : void
+	~{static} deleteRecursively(root : Path) : void
+	-{static} toZipEntryName(relativePath : Path) : String
+	-{static} findSingleFileToCompress(sourceRoot : Path) : Path
+	-{static} deriveSingleFileName(archiveFile : Path) : String
+}
+class ZipArchiveFormat {
+	+supports(archiveFile : Path) : boolean
+	+extract(archiveFile : Path, targetRoot : Path) : void
+	+write(sourceRoot : Path, archiveFile : Path) : void
+}
+class ExtZipDirectoryIterator {
+	-delegate : Iterator<Path>
+	-fileSystem : ExtZipFileSystem
+	-filter : DirectoryStream.Filter<? super Path>
+	-next : Path
+	-prepared : boolean
+	~ExtZipDirectoryIterator(delegate : Iterator<Path>, fileSystem : ExtZipFileSystem, filter : DirectoryStream.Filter<? super Path>)
+	+hasNext() : boolean
+	+next() : Path
+}
+enum ArchiveContainerType {
+	ZIP
+	TAR
+	SINGLE_FILE
+}
+interface ArchiveFormat {
+	~supports(archiveFile : Path) : boolean
+	~extract(archiveFile : Path, targetRoot : Path) : void
+	~write(sourceRoot : Path, archiveFile : Path) : void
+}
+class ArchiveFormats {
+	-{static} FORMATS : List<ArchiveFormat>
+	-ArchiveFormats()
+	+{static} resolve(archiveFile : Path) : ArchiveFormat
+	+{static} extractToDirectory(archiveFile : Path, targetRoot : Path) : void
+	+{static} writeFromDirectory(sourceRoot : Path, archiveFile : Path) : void
+}
+class ArchiveFormatDetector {
+	-ArchiveFormatDetector()
+	~{static} detect(archiveFile : Path) : ArchiveFormatInfo
+}
+class ExtZipPath {
+	-fileSystem : ExtZipFileSystem
+	-delegate : Path
+	~ExtZipPath(fileSystem : ExtZipFileSystem, delegate : Path)
+	~getExtZipFileSystem() : ExtZipFileSystem
+	~getDelegate() : Path
+	-requireSameProvider(path : Path) : ExtZipPath
+	-isUnderTempRoot() : boolean
+	-toVirtualString() : String
+	+getFileSystem() : ExtZipFileSystem
+	+isAbsolute() : boolean
+	+getRoot() : Path
+	+getFileName() : Path
+	+getParent() : Path
+	+getNameCount() : int
+	+getName(index : int) : Path
+	+subpath(beginIndex : int, endIndex : int) : Path
+	+startsWith(other : Path) : boolean
+	+startsWith(other : String) : boolean
+	+endsWith(other : Path) : boolean
+	+endsWith(other : String) : boolean
+	+normalize() : Path
+	+resolve(other : Path) : Path
+	+resolve(other : String) : Path
+	+resolveSibling(other : Path) : Path
+	+resolveSibling(other : String) : Path
+	+relativize(other : Path) : Path
+	+toUri() : URI
+	+toAbsolutePath() : Path
+	+toRealPath(options : LinkOption) : Path
+	+toFile() : File
+	+register(watcher : WatchService, events : WatchEvent.Kind<?>[], modifiers : WatchEvent.Modifier) : WatchKey
+	+iterator() : Iterator<Path>
+	+compareTo(other : Path) : int
+	+toString() : String
+	+equals(obj : Object) : boolean
+	+hashCode() : int
+}
+class TarArchiveFormat {
+	+supports(archiveFile : Path) : boolean
+	+extract(archiveFile : Path, targetRoot : Path) : void
+	+write(sourceRoot : Path, archiveFile : Path) : void
+}
+class CoreExtractorUriTest {
+	-CoreExtractorUriTest()
+	+{static} run() : void
+	-{static} testParseStandardUri() : void
+	-{static} testParseUriWithEntryPath() : void
+	-{static} testParseUriNoEntry() : void
+	-{static} testParseUriBangWithoutSlash() : void
+	-{static} testParseUriDoubleSlashStripped() : void
+	-{static} testParseNullUriThrows() : void
+	-{static} testParseNullSchemeThrows() : void
+	-{static} testParseBlankSchemeThrows() : void
+	-{static} testParseWrongSchemeThrows() : void
+	-{static} testParseEmptyBodyUsesGetPath() : void
+	-{static} testParseUrlEncodedPath() : void
+	-{static} testZipArchiveFormatSupports() : void
+	-{static} testZipArchiveFormatSupportsJar() : void
+	-{static} testZipArchiveFormatRejectsNonZip() : void
+	-{static} testTarArchiveFormatSupports() : void
+	-{static} testTarArchiveFormatRejectsNonTar() : void
+	-{static} testArchiveFormatsResolveJar() : void
+	-{static} expectException(action : Runnable, expected : Class<? extends Throwable>) : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class ExtZipDirectoryStream {
+	-delegate : DirectoryStream<Path>
+	-fileSystem : ExtZipFileSystem
+	-filter : Filter<? super Path>
+	~ExtZipDirectoryStream(delegate : DirectoryStream<Path>, fileSystem : ExtZipFileSystem, filter : Filter<? super Path>)
+	+iterator() : Iterator<Path>
+	+close() : void
+}
+class ExtZipPathIterator {
+	-fileSystem : ExtZipFileSystem
+	-delegate : Iterator<Path>
+	~ExtZipPathIterator(fileSystem : ExtZipFileSystem, delegate : Iterator<Path>)
+	+hasNext() : boolean
+	+next() : Path
+}
+class XzCompressionStrategy {
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
+}
+class GzipCompressionStrategy {
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
+}
+interface ICompressionStrategy {
+	~wrapInput(input : InputStream) : InputStream
+	~wrapOutput(output : OutputStream) : OutputStream
+}
+class LzmaCompressionStrategy {
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
+}
+class CompressionStrategyFactory {
+	-CompressionStrategyFactory()
+	+{static} forKey(key : String) : ICompressionStrategy
+}
+class NoCompressionStrategy {
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
+}
+class Bzip2CompressionStrategy {
+	+wrapInput(input : InputStream) : InputStream
+	+wrapOutput(output : OutputStream) : OutputStream
+}
+class ExtZipFileSystem {
+	-provider : ExtZipFsProvider
+	-archivePath : Path
+	-tempRoot : Path
+	-readOnly : boolean
+	-open : AtomicBoolean
+	-shutdownHook : Thread
+	~ExtZipFileSystem(provider : ExtZipFsProvider, archivePath : Path, tempRoot : Path, readOnly : boolean)
+	~installShutdownHook() : void
+	~getArchivePath() : Path
+	~getTempRoot() : Path
+	~wrap(delegate : Path) : ExtZipPath
+	~ensureWritable() : void
+	~ensureWritableFor(options : Set<? extends OpenOption>) : void
+	+provider() : FileSystemProvider
+	+close() : void
+	+isOpen() : boolean
+	+isReadOnly() : boolean
+	+getSeparator() : String
+	+getRootDirectories() : Iterable<Path>
+	+getFileStores() : Iterable<FileStore>
+	+supportedFileAttributeViews() : Set<String>
+	+getPath(first : String, more : String) : Path
+	+getPathMatcher(syntaxAndPattern : String) : PathMatcher
+	+getUserPrincipalLookupService() : UserPrincipalLookupService
+	+newWatchService() : WatchService
+	-closeQuietly() : void
+	-asIoException(ex : Exception) : IOException
+}
+class ExtZipFsProvider {
+	-mounted : Map<Path, ExtZipFileSystem>
+	+getScheme() : String
+	+newFileSystem(uri : URI, env : Map<String, ?>) : FileSystem
+	+getFileSystem(uri : URI) : FileSystem
+	+getPath(uri : URI) : Path
+	+newByteChannel(path : Path, options : Set<? extends OpenOption>, attrs : FileAttribute<?>) : SeekableByteChannel
+	+newDirectoryStream(dir : Path, filter : DirectoryStream.Filter<? super Path>) : DirectoryStream<Path>
+	+createDirectory(dir : Path, attrs : FileAttribute<?>) : void
+	+delete(path : Path) : void
+	+copy(source : Path, target : Path, options : CopyOption) : void
+	+move(source : Path, target : Path, options : CopyOption) : void
+	+isSameFile(path : Path, path2 : Path) : boolean
+	+isHidden(path : Path) : boolean
+	+getFileStore(path : Path) : FileStore
+	+checkAccess(path : Path, modes : AccessMode) : void
+	+getFileAttributeView(path : Path, type : Class<V>, options : LinkOption) : V
+	+readAttributes(path : Path, type : Class<A>, options : LinkOption) : A
+	+readAttributes(path : Path, attributes : String, options : LinkOption) : Map<String, Object>
+	+setAttribute(path : Path, attribute : String, value : Object, options : LinkOption) : void
+	~resolveArchivePath(archivePart : String, env : Map<String, ?>) : Path
+	~toKey(archive : Path) : Path
+	~requireExtPath(path : Path) : ExtZipPath
+	~unregister(fileSystem : ExtZipFileSystem) : void
+}
+class UtilTest {
+	-UtilTest()
+	~{static} run() : void
+	-{static} testDetectText() : void
+	-{static} testDetectImage() : void
+	-{static} testDetectBinary() : void
+	-{static} testDetectUnknown() : void
+	-{static} testDetectNull() : void
+	-{static} testDetectEmpty() : void
+	-{static} testDetectCaseInsensitive() : void
+	-{static} testMimeDescriptionText() : void
+	-{static} testMimeDescriptionImage() : void
+	-{static} testMimeDescriptionBinary() : void
+	-{static} testMimeDescriptionUnknown() : void
+	-{static} testFormatBytes() : void
+	-{static} testFormatKilobytes() : void
+	-{static} testFormatMegabytes() : void
+	-{static} testFormatGigabytes() : void
+	-{static} testFormatZeroBytes() : void
+	-{static} testFormatBoundaryKB() : void
+	-{static} testFormatBoundaryMB() : void
+	-{static} testFormatBoundaryGB() : void
+	-{static} assertType(ext : String, expected : FileType, label : String) : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class App {
+	+{static} main(args : String[]) : void
+	-{static} printUsage() : void
+	-{static} sliceArgs(args : String[], start : int) : String[]
+}
+class ArchiveIntegrationTest {
+	-ArchiveIntegrationTest()
+	~{static} run() : void
+	-{static} roundTrip(archivePath : Path, kind : String) : void
+	-{static} singleFileRoundTrip(archivePath : Path, contentSeed : String) : void
+	-{static} deriveOutputName(archivePath : Path) : String
+	-{static} assertContent(path : Path, expected : String) : void
+	-{static} cleanup(root : Path) : void
+}
+class ModelTest {
+	-ModelTest()
+	~{static} run() : void
+	-{static} testFileNodeWithExplicitValues() : void
+	-{static} testFileNodeExtension() : void
+	-{static} testFileNodeNoExtension() : void
+	-{static} testFileNodeDotFile() : void
+	-{static} testFileNodeComparable() : void
+	-{static} testFileNodeEqualsAndHash() : void
+	-{static} testFileNodeToString() : void
+	-{static} testModelInitialState() : void
+	-{static} testModelOpenCloseLifecycle() : void
+	-{static} testModelReadOnlyFlag() : void
+	-{static} testModelSelectedFileEvent() : void
+	-{static} testModelNfsConfigEvent() : void
+	-{static} testModelNfsConfigOnEdt() : void
+	-{static} testModelTreeRefreshEvent() : void
+	-{static} testModelListChildrenReturnsContent() : void
+	-{static} testModelReadFileContent() : void
+	-{static} pumpEdt() : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} cleanup(root : Path) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class NFSIntegrationTest {
+	-{static} ENV_URI : String
+	-NFSIntegrationTest()
+	~{static} runIfConfigured() : void
+}
+class CoreNfsTest {
+	-CoreNfsTest()
+	~{static} run() : void
+	-{static} testValidConfigCreation() : void
+	-{static} testNullHostRejected() : void
+	-{static} testEmptyHostRejected() : void
+	-{static} testHostWithDotsRejected() : void
+	-{static} testHostWithSlashRejected() : void
+	-{static} testHostWithSemicolonRejected() : void
+	-{static} testHostWithPipeRejected() : void
+	-{static} testHostWithAmpersandRejected() : void
+	-{static} testInvalidPortLow() : void
+	-{static} testInvalidPortHigh() : void
+	-{static} testExportPathWithDotsRejected() : void
+	-{static} testMountPathWithDotsRejected() : void
+	-{static} testInvalidTimeoutLow() : void
+	-{static} testInvalidTimeoutHigh() : void
+	-{static} testConfigEquals() : void
+	-{static} testConfigToString() : void
+	-{static} testPathTraversalBlocked() : void
+	-{static} testReadOnlyWriteRejected() : void
+	-{static} testReadOnlyDeleteRejected() : void
+	-{static} testReadOnlyCreateDirRejected() : void
+	-{static} testReadOnlyRenameRejected() : void
+	-{static} testWriteReadOverwrite() : void
+	-{static} testListEmptyDirectory() : void
+	-{static} testDeleteNonExistentIsIdempotent() : void
+	-{static} testCreateNestedDirectory() : void
+	-{static} testListSortsDirsFirst() : void
+	-{static} testReadOnlyCopyRejected() : void
+	-{static} testCopyFile() : void
+	-{static} testVerifyConnection() : void
+	-{static} expectException(action : Runnable, expected : Class<? extends Throwable>) : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} assertEqual(expected : int, actual : int, context : String) : void
+	-{static} assertEqual(expected : boolean, actual : boolean, context : String) : void
+	-{static} cleanup(root : Path) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class ArchiveCopyTest {
+	-ArchiveCopyTest()
+	~{static} run() : void
+	-{static} testCopyFileToNewLocation(tempRoot : Path) : void
+	-{static} testCopyFileToExistingDirectory(tempRoot : Path) : void
+	-{static} testCopyFileOverwrite(tempRoot : Path) : void
+	-{static} testCopyToNestedNonexistentPath(tempRoot : Path) : void
+	-{static} testCopyDirectoryRecursive(tempRoot : Path) : void
+	-{static} testDeleteFile(tempRoot : Path) : void
+	-{static} testDeleteDirectory(tempRoot : Path) : void
+	-{static} testDeleteNonexistentFile(tempRoot : Path) : void
+	-{static} assertContent(path : Path, expectedContent : String) : void
+	-{static} cleanup(path : Path) : void
+}
+class CoreExtractorTest {
+	-CoreExtractorTest()
+	~{static} run() : void
+	-{static} testResolveZipFormat() : void
+	-{static} testResolveTarFormat() : void
+	-{static} testResolveUnsupportedThrows() : void
+	-{static} testExtractAndWriteZipRoundTrip() : void
+	-{static} testExtractAndWriteTarRoundTrip() : void
+	-{static} testExtZipPathResolve() : void
+	-{static} testExtZipPathParentAndFileName() : void
+	-{static} testExtZipPathToString() : void
+	-{static} testExtZipPathEquals() : void
+	-{static} testExtZipPathCompareTo() : void
+	-{static} testExtZipDirectoryStream() : void
+	-{static} testEmptyArchiveRoundTrip() : void
+	-{static} testNestedDirectoriesRoundTrip() : void
+	-{static} testProviderInvalidUri() : void
+	-{static} testProviderReadOnlyMode() : void
+	-{static} createSampleArchive(archivePath : Path) : void
+	-{static} assertPathContent(path : Path, expected : String) : void
+	-{static} assertFileContent(path : Path, expected : String) : void
+	-{static} assertEqual(expected : String, actual : String, context : String) : void
+	-{static} cleanup(root : Path) : void
+	-{static} fail(msg : String) : IllegalStateException
+}
+class NfsIntegrationTest {
+	-NfsIntegrationTest()
+	~{static} run() : void
+	-{static} testCreateAndList(tempRoot : Path) : void
+	-{static} testReadWriteFile(tempRoot : Path) : void
+	-{static} testDeleteFile(tempRoot : Path) : void
+	-{static} testRenameFile(tempRoot : Path) : void
+	-{static} testCopyFile(tempRoot : Path) : void
+	-{static} testCreateDirectory(tempRoot : Path) : void
+	-{static} testReadOnlyMode(tempRoot : Path) : void
+	-{static} cleanup(root : Path) : void
+}
+class FileOperations {
+	-model : ArchiveModel
+	+FileOperations(model : ArchiveModel)
+	+createFile(path : Path, content : String) : boolean
+	+createDirectory(path : Path) : boolean
+	+delete(path : Path) : boolean
+	+delete(node : FileNode) : boolean
+	+rename(oldPath : Path, newPath : Path) : boolean
+	+saveFile(path : Path, content : String) : boolean
+	+copy(sourcePath : Path, targetDir : Path) : boolean
+	+extractTo(archiveFilePath : Path, localDestination : Path) : boolean
+	-deleteRecursive(root : Path) : void
+	-showError(operation : String, ex : Exception) : void
+}
+interface IFileOperations {
+	~createFile(path : Path, content : String) : boolean
+	~createDirectory(path : Path) : boolean
+	~delete(path : Path) : boolean
+	~rename(oldPath : Path, newPath : Path) : boolean
+	~saveFile(path : Path, content : String) : boolean
+	~extractTo(sourcePath : Path, destination : Path) : boolean
+	~copy(sourcePath : Path, targetDir : Path) : boolean
+}
+class NfsFileOperations {
+	-model : ArchiveModel
+	-config : NfsConnectionConfig
+	+NfsFileOperations(model : ArchiveModel)
+	+setConfig(config : NfsConnectionConfig) : void
+	+getConfig() : NfsConnectionConfig
+	-requireConfig() : NfsConnectionConfig
+	+createFile(path : Path, content : String) : boolean
+	+createDirectory(path : Path) : boolean
+	+delete(path : Path) : boolean
+	+rename(oldPath : Path, newPath : Path) : boolean
+	+saveFile(path : Path, content : String) : boolean
+	+extractTo(sourcePath : Path, destination : Path) : boolean
+	+copy(sourcePath : Path, targetDir : Path) : boolean
+	+createFile(config : NfsConnectionConfig, remotePath : String, content : String) : boolean
+	+createDirectory(config : NfsConnectionConfig, remotePath : String) : boolean
+	+delete(config : NfsConnectionConfig, remotePath : String) : boolean
+	+rename(config : NfsConnectionConfig, oldPath : String, newPath : String) : boolean
+	+saveFile(config : NfsConnectionConfig, remotePath : String, content : String) : boolean
+	+copy(config : NfsConnectionConfig, sourcePath : String, destPath : String) : boolean
+	+extractTo(config : NfsConnectionConfig, nfsPath : String, localDestination : Path) : boolean
+	-showError(title : String, ex : IOException) : void
+}
+interface INfsController {
+	~getNfsFileOps() : IFileOperations
+	~mountNfs() : void
+	~unmountNfs() : void
+	~extractNfsSelected() : void
+	~isNfsMounted() : boolean
+}
+class NfsConnectionDialog {
+	-hostField : JTextField
+	-portSpinner : JSpinner
+	-exportPathField : JTextField
+	-mountPathField : JTextField
+	-timeoutSpinner : JSpinner
+	-readOnlyCheckbox : JCheckBox
+	-result : NfsConnectionConfig
+	+NfsConnectionDialog(parent : Component)
+	-initUI() : void
+	+showDialog() : NfsConnectionConfig
+}
+class ArchiveController {
+	-{static} ARCHIVE_FORMAT_OPTIONS : ArchiveFormatOption[]
+	-model : ArchiveModel
+	-fileOps : FileOperations
+	-nfsFileOps : NfsFileOperations
+	-parentComponent : Component
+	-clipboard : ClipboardEntry
+	+ArchiveController(model : ArchiveModel)
+	+setParentComponent(parent : Component) : void
+	+getModel() : ArchiveModel
+	+getFileOps() : IFileOperations
+	+openDirectory() : void
+	+openArchive() : void
+	+mountNfs() : void
+	+createArchive() : void
+	+closeArchive() : void
+	+closeSession(sessionId : String) : void
+	+saveArchive() : void
+	+saveSession(sessionId : String) : void
+	+newFile() : void
+	+newDirectory() : void
+	+deleteSelected() : void
+	+renameSelected() : void
+	+extractSelected() : void
+	+saveFileContent(path : Path, content : String) : void
+	+copySelected() : void
+	+cutSelected() : void
+	+hasClipboard() : boolean
+	+pasteSelected() : void
+	-doPaste(entry : ClipboardEntry, targetDir : Path) : void
+	-copySingleFile(src : Path, dest : Path, sameFs : boolean, deleteSource : boolean, srcSessionId : String) : void
+	-readBytesFromSession(sessionId : String, path : Path) : byte[]
+	-copyDirectoryRecursive(srcDir : Path, destDir : Path, sameFs : boolean, deleteSource : boolean, srcSessionId : String) : void
+	+getNfsFileOps() : IFileOperations
+	+unmountNfs() : void
+	+extractNfsSelected() : void
+	+isNfsMounted() : boolean
+	-getTargetDirectory(selected : FileNode) : Path
+	-ensureArchiveExtension(selected : Path, requiredExtension : String) : Path
+	-stripSupportedArchiveExtension(filename : String) : String
+	-configureCreateFilter(chooser : JFileChooser, formatOption : ArchiveFormatOption) : void
+	-configureOpenFilters(chooser : JFileChooser) : void
+	-buildCreateFormatLabels() : String[]
+	-resolveTargetDirectory() : Path
+	-executeInBackground(message : String, task : Runnable) : void
+	-showError(operation : String, ex : Exception) : void
+}
+class ClipboardEntry {
+	-node : FileNode
+	-cut : boolean
+	-sourceSessionId : String
+}
+class ArchiveFormatOption {
+	-label : String
+	-requiredExtension : String
+	-filterDescription : String
+	-extensions : String[]
+	-ArchiveFormatOption(label : String, requiredExtension : String, filterDescription : String, extensions : String)
+}
+interface IArchiveController {
+	~setParentComponent(parent : Component) : void
+	~getModel() : ArchiveModel
+	~getFileOps() : IFileOperations
+	~openDirectory() : void
+	~openArchive() : void
+	~mountNfs() : void
+	~createArchive() : void
+	~copySelected() : void
+	~cutSelected() : void
+	~pasteSelected() : void
+	~hasClipboard() : boolean
+	~closeSession(sessionId : String) : void
+	~saveSession(sessionId : String) : void
+	~closeArchive() : void
+	~saveArchive() : void
+	~newFile() : void
+	~newDirectory() : void
+	~deleteSelected() : void
+	~renameSelected() : void
+	~extractSelected() : void
+	~saveFileContent(path : Path, content : String) : void
+}
+class MenuBarFactory {
+	-MenuBarFactory()
+	+{static} create(controller : IArchiveController, model : ArchiveModel) : JMenuBar
+	-{static} createFileMenu(controller : IArchiveController, model : ArchiveModel) : JMenu
+	-{static} createNfsMenu(controller : IArchiveController, model : ArchiveModel) : JMenu
+	-{static} createEditMenu(controller : IArchiveController, model : ArchiveModel) : JMenu
+	-{static} createViewMenu(model : ArchiveModel) : JMenu
+	-{static} createHelpMenu(controller : IArchiveController) : JMenu
+}
+class FileContentPanel {
+	-{static} CARD_EMPTY : String
+	-{static} CARD_TEXT : String
+	-{static} CARD_HEX : String
+	-{static} CARD_IMAGE : String
+	-{static} CARD_DIR : String
+	-model : ArchiveModel
+	-controller : IArchiveController
+	-cardLayout : CardLayout
+	-textArea : JTextArea
+	-hexArea : JTextArea
+	-imageLabel : JLabel
+	-directoryLabel : JLabel
+	-emptyLabel : JLabel
+	-saveButton : JButton
+	-fileNameLabel : JLabel
+	-currentFilePath : Path
+	+FileContentPanel(model : ArchiveModel, controller : IArchiveController)
+	-{static} monoFont() : Font
+	-{static} hintColor() : Color
+	+updateUI() : void
+	-onModelChange(evt : PropertyChangeEvent) : void
+	-displayFile(fileNode : FileNode) : void
+	-showTextContent(fileNode : FileNode) : void
+	-showHexContent(fileNode : FileNode) : void
+	-showImageContent(fileNode : FileNode) : void
+	-showDirectoryInfo(fileNode : FileNode) : void
+	-clearView() : void
+	-showCard(card : String) : void
+	-saveCurrentFile() : void
+	-formatHex(data : byte[]) : String
+}
+class LineNumberView {
+	-textArea : JTextArea
+	~LineNumberView(textArea : JTextArea)
+	#paintComponent(g : Graphics) : void
+}
+class ArchiveTreePanel {
+	-{static} CLOSE_BTN_WIDTH : int
+	-model : ArchiveModel
+	-controller : IArchiveController
+	-tree : JTree
+	-treeModel : DefaultTreeModel
+	-hiddenRoot : DefaultMutableTreeNode
+	-sessionNodes : Map<String, DefaultMutableTreeNode>
+	-hoveredRow : int
+	+ArchiveTreePanel(model : ArchiveModel, controller : IArchiveController)
+	-onModelChange(evt : PropertyChangeEvent) : void
+	-addSessionNode(session : MountSession) : void
+	-removeSessionNode(sessionId : String) : void
+	-clearAllNodes() : void
+	-refreshAllSessions() : void
+	-loadChildren(parentNode : DefaultMutableTreeNode, directory : Path, sessionId : String) : void
+	-loadChildrenIfNeeded(node : DefaultMutableTreeNode) : void
+	-handleMouseEvent(e : MouseEvent) : void
+	-showContextMenu(e : MouseEvent) : void
+	-confirmAndClose(sessionId : String) : void
+	-findSessionId(node : DefaultMutableTreeNode) : String
+	-findSession(id : String) : MountSession
+	-showProperties() : void
+}
+class SessionNodeData {
+	-sessionId : String
+	-label : String
+}
+class SessionAwareRenderer {
+	-fileRenderer : FileTreeCellRenderer
+	-archiveIcon : Icon
+	+getTreeCellRendererComponent(t : JTree, value : Object, selected : boolean, expanded : boolean, leaf : boolean, row : int, focused : boolean) : Component
+}
+class MainFrame {
+	-{static} TITLE : String
+	-{static} DEFAULT_WIDTH : int
+	-{static} DEFAULT_HEIGHT : int
+	-model : ArchiveModel
+	-controller : IArchiveController
+	+MainFrame(model : ArchiveModel, controller : IArchiveController)
+	-initUI() : void
+	-registerCloseHandler() : void
+	-handleExit() : void
+	-updateTitle() : void
+}
+class StatusBarPanel {
+	-archiveLabel : JLabel
+	-fileInfoLabel : JLabel
+	-modeLabel : JLabel
+	-currentReadOnly : boolean
+	+StatusBarPanel(model : ArchiveModel)
+	+updateUI() : void
+	-updateModeLabel(ro : boolean) : void
+	-onModelChange(evt : PropertyChangeEvent) : void
+}
+class ToolBarFactory {
+	-ToolBarFactory()
+	+{static} create(controller : IArchiveController, model : ArchiveModel) : JToolBar
+	-{static} makeButton(text : String, icon : Icon, tooltip : String) : JButton
+}
+class AboutDialog {
+	+AboutDialog(owner : Frame)
+	-initUI() : void
+}
+class PropertiesDialog {
+	+PropertiesDialog(owner : Frame, fileName : String, path : String, type : String, size : String, isDirectory : boolean)
+	-initUI(fileName : String, path : String, type : String, size : String, isDirectory : boolean) : void
+	-addRow(panel : JPanel, lbl : GridBagConstraints, val : GridBagConstraints, row : int, label : String, value : String) : void
+}
+class FileTreeCellRenderer {
+	-folderIcon : Icon
+	-folderOpenIcon : Icon
+	-textIcon : Icon
+	-imageIcon : Icon
+	-binaryIcon : Icon
+	-genericFileIcon : Icon
+	-archiveRootIcon : Icon
+	+getTreeCellRendererComponent(tree : JTree, value : Object, sel : boolean, expanded : boolean, leaf : boolean, row : int, hasFocus : boolean) : Component
+	-chooseIcon(fileNode : FileNode, expanded : boolean) : Icon
+}
+class IconFactory {
+	-{static} ICON_SIZE : int
+	-IconFactory()
+	+{static} folderIcon() : Icon
+	+{static} folderOpenIcon() : Icon
+	+{static} fileIcon() : Icon
+	+{static} textFileIcon() : Icon
+	+{static} imageFileIcon() : Icon
+	+{static} binaryFileIcon() : Icon
+	+{static} archiveIcon() : Icon
+}
+interface IconPainter {
+	~paint(g : Graphics2D, width : int, height : int) : void
+}
+class PaintedIcon {
+	-width : int
+	-height : int
+	-painter : IconPainter
+	~PaintedIcon(width : int, height : int, painter : IconPainter)
+	+paintIcon(c : Component, g : Graphics, x : int, y : int) : void
+	+getIconWidth() : int
+	+getIconHeight() : int
+}
+class FileTypeDetector {
+	-{static} TEXT_EXTENSIONS : Set<String>
+	-{static} IMAGE_EXTENSIONS : Set<String>
+	-{static} BINARY_EXTENSIONS : Set<String>
+	-FileTypeDetector()
+	+{static} detect(extension : String) : FileType
+	+{static} getMimeDescription(extension : String) : String
+}
+enum FileType {
+	TEXT
+	IMAGE
+	BINARY
+	UNKNOWN
+}
+class SwingUtils {
+	-SwingUtils()
+	+{static} setSystemLookAndFeel() : void
+	+{static} isDarkTheme() : boolean
+	+{static} toggleTheme() : void
+	-{static} applyUiCustomisations() : void
+	+{static} formatFileSize(bytes : long) : String
+	+{static} centerOnScreen(window : Window) : void
+	+{static} flowPanel(components : Component) : JPanel
+	+{static} onEdt(action : Runnable) : void
+}
+class UIUtils {
+	-UIUtils()
+	+{static} showError(parent : Component, title : String, ex : Exception) : void
+}
+class WeeFsApp {
+	-{static} instance : WeeFsApp
+	-model : ArchiveModel
+	-controller : ArchiveController
+	-mainFrame : MainFrame
+	-WeeFsApp()
+	+{static} getInstance() : WeeFsApp
+	+getModel() : ArchiveModel
+	+getController() : ArchiveController
+	+launch() : void
+	+{static} start() : void
+}
+class MainLauncher {
+	-MainLauncher()
+	+{static} main(args : String[]) : void
+}
+class UiIntegrationTest {
+	-UiIntegrationTest()
+	+{static} main(args : String[]) : void
+	+{static} run() : void
+	-{static} testOpenFiresEventsOnEdt() : void
+	-{static} testOpenFiresCorrectReadOnlyTransition() : void
+	-{static} testCloseNopWhenAlreadyClosed() : void
+	-{static} testCloseFiresEventsOnEdt() : void
+	-{static} testSaveArchiveReopens() : void
+	-{static} testFileOperationsRoundTrip() : void
+	-{static} testCopyRejectsDirectory() : void
+	-{static} testPropertyChangesOldNewValues() : void
+	-{static} runWithTempArchive(suffix : String, body : TestBody) : void
+	-{static} driveModel(model : ArchiveModel, action : ModelAction) : void
+	-{static} pumpEdt() : void
+	-{static} runOnEdt(action : Runnable) : void
+	-{static} deleteRecursive(root : Path) : void
+	-{static} assertionFailure(msg : String) : IllegalStateException
+}
+interface ModelAction {
+	~run(model : ArchiveModel) : void
+}
+interface TestBody {
+	~run(model : ArchiveModel, archivePath : Path) : void
+}
+class MountSession {
+	-id : String
+	-label : String
+	~fileSystem : FileSystem
+	~directoryRoot : Path
+	~remoteMounted : boolean
+	~readOnly : boolean
+	~displayPath : Path
+	~nfsConfig : NfsConnectionConfig
+	~MountSession(label : String, fs : FileSystem, directoryRoot : Path, displayPath : Path, readOnly : boolean, remoteMounted : boolean)
+	~MountSession(label : String, nfsConfig : NfsConnectionConfig)
+	+getId() : String
+	+getLabel() : String
+	+isReadOnly() : boolean
+	+isNfsMounted() : boolean
+	+isRemoteMounted() : boolean
+	+getDisplayPath() : Path
+	+isSaveable() : boolean
+	+getNfsConfig() : NfsConnectionConfig
+	+getRootPath() : Path
+	~isSessionOpen() : boolean
+	~close() : void
+}
+class FileNode {
+	-path : Path
+	-displayName : String
+	-directory : boolean
+	-size : long
+	+FileNode(path : Path)
+	+FileNode(path : Path, displayName : String, directory : boolean)
+	+getPath() : Path
+	+getDisplayName() : String
+	+isDirectory() : boolean
+	+getSize() : long
+	+getExtension() : String
+	+compareTo(other : FileNode) : int
+	+toString() : String
+	+equals(obj : Object) : boolean
+	+hashCode() : int
+}
+class ArchiveModel {
+	+{static} PROP_ARCHIVE_PATH : String
+	+{static} PROP_NFS_CONFIG : String
+	+{static} PROP_OPEN : String
+	+{static} PROP_READ_ONLY : String
+	+{static} PROP_REMOTE_MOUNTED : String
+	+{static} PROP_SELECTED_FILE : String
+	+{static} PROP_TREE_REFRESH : String
+	+{static} PROP_SESSION_ADDED : String
+	+{static} PROP_SESSION_REMOVED : String
+	-pcs : PropertyChangeSupport
+	-fileSystemFactory : FileSystemFactory
+	-sessions : List<MountSession>
+	-activeSession : MountSession
+	-selectedFile : FileNode
+	+addPropertyChangeListener(listener : PropertyChangeListener) : void
+	+removePropertyChangeListener(listener : PropertyChangeListener) : void
+	+addPropertyChangeListener(propertyName : String, listener : PropertyChangeListener) : void
+	+getSessions() : List<MountSession>
+	+getActiveSession() : MountSession
+	+getSession(id : String) : MountSession
+	+setActiveSession(id : String) : void
+	+closeSession(id : String) : void
+	+openDirectory(dir : Path, readOnly : boolean) : void
+	+openArchive(archive : Path, readOnly : boolean) : void
+	+openMountUri(uri : URI, readOnly : boolean) : void
+	-openMountUri(uri : URI, readOnly : boolean, displayPath : Path) : void
+	+createArchive(archive : Path) : void
+	+setNfsConfig(config : NfsConnectionConfig) : void
+	-addSession(session : MountSession) : void
+	+closeArchive() : void
+	+isOpen() : boolean
+	+isReadOnly() : boolean
+	+getArchivePath() : Path
+	+getFileSystem() : FileSystem
+	+isRemoteMounted() : boolean
+	+isNfsMounted() : boolean
+	+getNfsConfig() : NfsConnectionConfig
+	+getRootPath() : Path
+	+listChildren(directory : Path) : List<FileNode>
+	+listChildrenForSession(sessionId : String, directory : Path) : List<FileNode>
+	-listChildrenInSession(session : MountSession, directory : Path) : List<FileNode>
+	+readFileContent(path : Path) : String
+	+readFileBytes(path : Path) : byte[]
+	+getSelectedFile() : FileNode
+	+setSelectedFile(node : FileNode) : void
+	+fireTreeRefresh() : void
+	-findSessionById(id : String) : MountSession
+	-findSessionForPath(path : Path) : MountSession
+	-{static} fireOnEdt(action : Runnable) : void
+	-{static} joinRemotePath(parent : String, childName : String) : String
+}
+class RemoteMountManager {
+	+{static} PROP_NFS_CONFIG : String
+	-pcs : PropertyChangeSupport
+	-nfsConfig : NfsConnectionConfig
+	+addPropertyChangeListener(propertyName : String, listener : PropertyChangeListener) : void
+	+setNfsConfig(config : NfsConnectionConfig) : void
+	+getNfsConfig() : NfsConnectionConfig
+	+isNfsMounted() : boolean
+}
+class SftpServerController {
+	-{static} LOG : Logger
+	-properties : SftpServerProperties
+	-fileSystemView : VfsSftpFileSystemView
+	-vfsMount : AutoCloseable
+	-running : AtomicBoolean
+	-server : SshServer
+	+SftpServerController(properties : SftpServerProperties, fileSystemView : VfsSftpFileSystemView, vfsMount : AutoCloseable)
+	+start() : void
+	+stop() : void
+	+isRunning() : boolean
+	+isAutoStartup() : boolean
+	+getPhase() : int
+	+stop(callback : Runnable) : void
+	-closeQuietly() : void
+}
+class SftpServerApplication {
+	-SftpServerApplication()
+	+{static} main(args : String[]) : void
+}
+class VfsSftpFileSystemView {
+	-mount : ArchiveVfsMount
+	+VfsSftpFileSystemView(mount : ArchiveVfsMount)
+	+fileSystem() : FileSystem
+	+userHomeDirectory(username : String) : Path
+	+resolve(virtualPath : String) : VfsSftpFile
+	-{static} normalize(virtualPath : String) : String
+}
+class VfsSftpFile {
+	-path : Path
+	+VfsSftpFile(path : Path)
+	+path() : Path
+	+isDirectory() : boolean
+	+list() : List<Path>
+	+read() : byte[]
+	+write(data : byte[], truncate : boolean) : void
+	+delete() : void
+	+renameTo(destination : VfsSftpFile, replaceExisting : boolean) : void
+}
+class VfsFileSystemFactory {
+	-view : VfsSftpFileSystemView
+	+VfsFileSystemFactory(view : VfsSftpFileSystemView)
+	+getUserHomeDir(session : SessionContext) : Path
+	+createFileSystem(session : SessionContext) : FileSystem
+}
+class SftpServerProperties {
+	-host : String
+	-port : int
+	-username : String
+	-password : String
+	-archivePath : String
+	-readOnly : boolean
+	-hostKeyPath : String
+	-{static} DEFAULT_HOST : String
+	-{static} DEFAULT_PORT : int
+	-{static} DEFAULT_USERNAME : String
+	-{static} DEFAULT_PASSWORD : String
+	-{static} DEFAULT_HOST_KEY_PATH : String
+	+{static} from(environment : Environment) : SftpServerProperties
+	-{static} require(environment : Environment, propertyKey : String, envKey : String) : String
+	-{static} value(environment : Environment, propertyKey : String, envKey : String, fallback : String) : String
+	-{static} intValue(environment : Environment, propertyKey : String, envKey : String, fallback : int) : int
+	-{static} boolValue(environment : Environment, propertyKey : String, envKey : String, fallback : boolean) : boolean
+}
+class SftpServerConfiguration {
+	~sftpServerProperties(environment : Environment) : SftpServerProperties
+	~archiveVfsMount(properties : SftpServerProperties) : ArchiveVfsMount
+	~vfsSftpFileSystemView(archiveVfsMount : ArchiveVfsMount) : VfsSftpFileSystemView
+	~sftpServerController(properties : SftpServerProperties, fileSystemView : VfsSftpFileSystemView, archiveVfsMount : ArchiveVfsMount) : SftpServerController
+}
+class ArchiveVfsMount {
+	-fileSystem : FileSystem
+	-rootPath : Path
+	-closed : AtomicBoolean
+	-ArchiveVfsMount(fileSystem : FileSystem)
+	+{static} open(properties : SftpServerProperties) : ArchiveVfsMount
+	+fileSystem() : FileSystem
+	+rootPath() : Path
+	+close() : void
 }
 
-' ═══════════════════════════════════════════════════════════════════════
-'  CORE · EXTRACTOR · COMPRESSION  (Strategy + Factory)
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.core.extractor.compression" {
-
-  interface ICompressionStrategy <<Strategy>> {
-    +wrapInput(InputStream) : InputStream
-    +wrapOutput(OutputStream) : OutputStream
-  }
-
-  class CompressionStrategyFactory <<Factory>> {
-    -strategies : Map<String, ICompressionStrategy>
-    +register(String, ICompressionStrategy) : void
-    +forExtension(String) : ICompressionStrategy
-  }
-
-  class GzipCompressionStrategy {
-    +wrapInput(InputStream) : InputStream
-    +wrapOutput(OutputStream) : OutputStream
-  }
-
-  class Bzip2CompressionStrategy {
-    +wrapInput(InputStream) : InputStream
-    +wrapOutput(OutputStream) : OutputStream
-  }
-
-  class XzCompressionStrategy {
-    +wrapInput(InputStream) : InputStream
-    +wrapOutput(OutputStream) : OutputStream
-  }
-
-  class NoCompressionStrategy {
-    +wrapInput(InputStream) : InputStream
-    +wrapOutput(OutputStream) : OutputStream
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  CORE · FILESYSTEM  (SPI-based driver registration)
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.core.filesystem" {
-
-  interface FileSystemDriver {
-    +scheme() : String
-    +open(URI, Map) : FileSystem
-  }
-
-  class FileSystemFactory {
-    -drivers : Map<String, FileSystemDriver>
-    +FileSystemFactory()
-    +register(FileSystemDriver) : void
-    +registerDriver(String, FileSystemDriver) : void
-    +open(URI, Map) : FileSystem
-    +supportedSchemes() : List<String>
-    -registerDefaults() : void
-  }
-
-  class LocalFileSystemDriver {
-    +scheme() : String
-    +open(URI, Map) : FileSystem
-  }
-
-  class NfsFileSystemDriver {
-    -provider : NfsSftpFsProvider
-    +NfsFileSystemDriver(NfsSftpFsProvider)
-    +scheme() : String
-    +open(URI, Map) : FileSystem
-  }
-
-  class ZipFileSystemDriver {
-    -provider : ExtZipFsProvider
-    +ZipFileSystemDriver(ExtZipFsProvider)
-    +scheme() : String
-    +open(URI, Map) : FileSystem
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  CORE · NFS
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.core.nfs" {
-
-  interface IRemoteFileSystem {
-    +read(String) : byte[]
-    +write(String, byte[]) : void
-    +delete(String) : void
-    +list(String) : List<NfsFileInfo>
-  }
-
-  class NfsConnectionConfig {
-    -host : String
-    -port : int
-    -exportPath : String
-    -mountPoint : String
-    -readOnly : boolean
-    +getHost() : String
-    +getPort() : int
-    +isReadOnly() : boolean
-  }
-
-  class NfsSftpFsProvider {
-    -io : NfsSftpFsIO
-    +getScheme() : String
-    +newFileSystem(URI, Map) : FileSystem
-  }
-
-  class NfsSftpFsIO {
-    -pool : SessionPool
-    +get(NfsSftpConfig, Path) : InputStream
-    +put(NfsSftpConfig, Path, InputStream) : void
-    +delete(NfsSftpConfig, Path) : void
-  }
-
-  class NfsFileSystem {
-    -provider : NfsSftpFsProvider
-    -config : NfsSftpConfig
-    +getPath(String, String...) : Path
-    +close() : void
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  UI · MODEL  (sessions split out of god object)
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.ui.model" {
-
-  class ArchiveModel {
-    +{static} PROP_SESSION_ADDED : String
-    +{static} PROP_SESSION_REMOVED : String
-    +{static} PROP_ARCHIVE_PATH : String
-    +{static} PROP_REMOTE_MOUNTED : String
-    +{static} PROP_NFS_CONFIG : String
-    -sessions : List<MountSession>
-    -activeSession : MountSession
-    -selectedFile : FileNode
-    -remoteMounts : RemoteMountManager
-    +openArchive(Path, boolean) : void
-    +openMountUri(URI, boolean) : void
-    +closeSession(String) : void
-    +getSessions() : List<MountSession>
-    +getActiveSession() : MountSession
-    +setActiveSession(String) : void
-    +listChildren(Path) : List<FileNode>
-    +readFileBytes(Path) : byte[]
-    +addPropertyChangeListener(PropertyChangeListener) : void
-  }
-
-  class MountSession {
-    -id : String
-    -label : String
-    -fileSystem : FileSystem
-    -directoryRoot : Path
-    -displayPath : Path
-    -readOnly : boolean
-    -remoteMounted : boolean
-    -nfsConfig : NfsConnectionConfig
-    +getId() : String
-    +isNfsMounted() : boolean
-    +isRemoteMounted() : boolean
-    +isSaveable() : boolean
-    +getRootPath() : Path
-    ~close() : void
-  }
-
-  class RemoteMountManager {
-    -nfsConfig : NfsConnectionConfig
-    +setNfsConfig(NfsConnectionConfig) : void
-    +getNfsConfig() : NfsConnectionConfig
-    +isNfsMounted() : boolean
-  }
-
-  class FileNode {
-    -path : Path
-    -displayName : String
-    -directory : boolean
-    -size : long
-    +getPath() : Path
-    +isDirectory() : boolean
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  UI · CONTROLLER  (clean SRP + DIP)
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.ui.controller" {
-
-  interface IArchiveController {
-    +openArchive(File) : void
-    +closeSession(String) : void
-    +saveSession(String) : void
-    +copySelected() : void
-    +cutSelected() : void
-    +pasteSelected() : void
-    +extractSelected(Path) : void
-  }
-
-  interface INfsController {
-    +mountNfs(NfsConnectionConfig) : void
-    +unmountNfs() : void
-    +getNfsFileOps() : IFileOperations
-  }
-
-  interface IFileOperations <<Strategy>> {
-    +createFile(Path, String) : boolean
-    +createDirectory(Path) : boolean
-    +delete(Path) : boolean
-    +rename(Path, Path) : boolean
-    +saveFile(Path, String) : boolean
-    +extractTo(Path, Path) : boolean
-    +copy(Path, Path) : boolean
-  }
-
-  class ArchiveController {
-    -model : ArchiveModel
-    -fileOps : FileOperations
-    -nfsFileOps : NfsFileOperations
-    -clipboard : ClipboardEntry
-    -parentComponent : Component
-    +setParentComponent(Component) : void
-    +getModel() : ArchiveModel
-    +getFileOps() : IFileOperations
-    +openDirectory() : void
-    +openArchive() : void
-    +createArchive() : void
-    +mountNfs() : void
-    +closeSession(String) : void
-    +closeArchive() : void
-    +saveArchive() : void
-    +saveSession(String) : void
-    +copySelected() : void
-    +cutSelected() : void
-    +pasteSelected() : void
-    +hasClipboard() : boolean
-    +newFile() : void
-    +newDirectory() : void
-    +deleteSelected() : void
-    +renameSelected() : void
-    +extractSelected() : void
-    +saveFileContent(Path, String) : void
-  }
-
-  class FileOperations {
-    -model : ArchiveModel
-    +createFile(Path, String) : boolean
-    +createDirectory(Path) : boolean
-    +delete(Path) : boolean
-    +rename(Path, Path) : boolean
-    +saveFile(Path, String) : boolean
-    +extractTo(Path, Path) : boolean
-    +copy(Path, Path) : boolean
-  }
-
-  class NfsFileOperations {
-    -model : ArchiveModel
-    -config : NfsConnectionConfig
-    +setConfig(NfsConnectionConfig) : void
-    +getConfig() : NfsConnectionConfig
-    +createFile(Path, String) : boolean
-    +createDirectory(Path) : boolean
-    +delete(Path) : boolean
-    +rename(Path, Path) : boolean
-    +saveFile(Path, String) : boolean
-    +extractTo(Path, Path) : boolean
-    +copy(Path, Path) : boolean
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  UI · VIEW
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.ui.view" {
-
-  class MainFrame {
-    -model : ArchiveModel
-    -controller : IArchiveController
-    +buildUI() : void
-    -handleExit() : void
-  }
-
-  class ArchiveTreePanel {
-    -model : ArchiveModel
-    -controller : IArchiveController
-    +refresh() : void
-    -confirmAndClose(String) : void
-  }
-
-  class MenuBarFactory {
-    +{static} build(ArchiveModel, IArchiveController, INfsController) : JMenuBar
-  }
-
-  class ToolBarFactory {
-    +{static} build(ArchiveModel, IArchiveController, INfsController) : JToolBar
-  }
-}
-
-' ═══════════════════════════════════════════════════════════════════════
-'  UI · APP
-' ═══════════════════════════════════════════════════════════════════════
-package "io.wfs.ui" {
-  class WeeFsApp {
-    -model : ArchiveModel
-    -controller : ArchiveController
-    +{static} main(String[]) : void
-  }
-}
-
-' ─── Relationships ──────────────────────────────────────────────────────
-ArchiveFormat <|.. ZipArchiveFormat
-ArchiveFormat <|.. TarArchiveFormat
-
-ICompressionStrategy <|.. GzipCompressionStrategy
-ICompressionStrategy <|.. Bzip2CompressionStrategy
-ICompressionStrategy <|.. XzCompressionStrategy
-ICompressionStrategy <|.. NoCompressionStrategy
-
-FileSystemDriver <|.. LocalFileSystemDriver
 FileSystemDriver <|.. NfsFileSystemDriver
+NfsFileSystemDriver --> NfsSftpFsProvider
+FileSystemFactory --> FileSystemDriver
 FileSystemDriver <|.. ZipFileSystemDriver
-
-IArchiveController <|.. ArchiveController
-INfsController     <|.. ArchiveController
-IFileOperations    <|.. FileOperations
-IFileOperations    <|.. NfsFileOperations
-
-TarArchiveFormat --> CompressionStrategyFactory
-CompressionStrategyFactory --> ICompressionStrategy
+ZipFileSystemDriver --> ExtZipFsProvider
+FileSystemDriver <|.. LocalFileSystemDriver
+NfsSyncingByteChannel --> NfsFileSystem
+NfsSyncingByteChannel --> NfsPath
+NfsSftpFsProvider --> NfsFileSystem
+NfsPathIterator --> NfsFileSystem
+FileSystemFactory <|.. ArchiveFileSystemFactory
+NfsFsProvider --> NfsFileSystem
+NfsWritableByteChannel --> NfsConnectionConfig
+NfsPath --> NfsFileSystem
+IRemoteFileSystem <|.. NfsFileSystem
+NfsFileSystem --> NfsSftpFsProvider
+NfsFileSystem --> NfsSftpConfig
+NfsFileSystem --> NfsConnectionConfig
+ArchiveFormatInfo --> ArchiveContainerType
+ArchiveFormat <|.. ZipArchiveFormat
+ExtZipDirectoryIterator --> ExtZipFileSystem
 ArchiveFormats --> ArchiveFormat
-
-FileSystemFactory --> FileSystemDriver : discovers via ServiceLoader
-NfsFileSystemDriver --> NfsSftpFsProvider : injected
-ZipFileSystemDriver --> ExtZipFsProvider : injected
-
-NfsSftpFsProvider  --> NfsSftpFsIO
-NfsSftpFsProvider  --> NfsFileSystem
-NfsSftpFsIO       ..|> IRemoteFileSystem
-
-ArchiveModel --> MountSession : "*"
-ArchiveModel --> RemoteMountManager
-ArchiveModel --> FileNode
-RemoteMountManager --> FileSystemFactory
-MountSession --> NfsConnectionConfig
-
+ExtZipPath --> ExtZipFileSystem
+ArchiveFormat <|.. TarArchiveFormat
+ExtZipDirectoryStream --> ExtZipFileSystem
+ExtZipPathIterator --> ExtZipFileSystem
+ICompressionStrategy <|.. XzCompressionStrategy
+ICompressionStrategy <|.. GzipCompressionStrategy
+ICompressionStrategy <|.. LzmaCompressionStrategy
+ICompressionStrategy <|.. NoCompressionStrategy
+ICompressionStrategy <|.. Bzip2CompressionStrategy
+ExtZipFileSystem --> ExtZipFsProvider
+ExtZipFsProvider --> ExtZipFileSystem
+IFileOperations <|.. FileOperations
+FileOperations --> ArchiveModel
+IFileOperations <|.. NfsFileOperations
+NfsFileOperations --> ArchiveModel
+NfsFileOperations --> NfsConnectionConfig
+NfsConnectionDialog --> NfsConnectionConfig
+IArchiveController <|.. ArchiveController
+INfsController <|.. ArchiveController
+ArchiveController --> ArchiveFormatOption
 ArchiveController --> ArchiveModel
 ArchiveController --> FileOperations
 ArchiveController --> NfsFileOperations
-FileOperations    --> ArchiveModel
-NfsFileOperations --> NfsConnectionConfig
-
-WeeFsApp  --> ArchiveModel
-WeeFsApp  --> ArchiveController
-MainFrame --> ArchiveModel
-MainFrame --> IArchiveController
+ArchiveController --> ClipboardEntry
+FileContentPanel --> ArchiveModel
+FileContentPanel --> IArchiveController
 ArchiveTreePanel --> ArchiveModel
 ArchiveTreePanel --> IArchiveController
-MenuBarFactory   --> IArchiveController
-MenuBarFactory   --> INfsController
-ToolBarFactory   --> IArchiveController
-ToolBarFactory   --> INfsController
-
-note top of ArchiveModel
-  God-object fixed:
-   • sessions extracted into MountSession
-   • remote mount logic lives in
-     RemoteMountManager
-   • no embedded NfsIO static calls
-end note
-
-note top of FileSystemFactory
-  Extensible design:
-   • drivers stored in ConcurrentMap
-   • registerDefaults() hardcodes
-     built-in drivers (ZIP, NFS, file)
-   • register(driver) allows runtime
-     registration of custom schemes
-end note
-
-note bottom of NfsSftpFsIO
-  Single provider, pooled SFTP sessions.
-  Implements IRemoteFileSystem so higher
-  layers depend on an abstraction (DIP).
-end note
-
-note top of MountSession
-  Value object for one mount.
-  Carries fileSystem + config +
-  read-only / remote flags.
-end note
-
+SessionAwareRenderer --> FileTreeCellRenderer
+MainFrame --> ArchiveModel
+MainFrame --> IArchiveController
+PaintedIcon --> IconPainter
+WeeFsApp --> ArchiveModel
+WeeFsApp --> ArchiveController
+WeeFsApp --> MainFrame
+MountSession --> NfsConnectionConfig
+ArchiveModel --> FileSystemFactory
+ArchiveModel --> MountSession
+ArchiveModel --> FileNode
+RemoteMountManager --> NfsConnectionConfig
+SftpServerController --> SftpServerProperties
+SftpServerController --> VfsSftpFileSystemView
+VfsSftpFileSystemView --> ArchiveVfsMount
+FileSystemFactory <|.. VfsFileSystemFactory
+VfsFileSystemFactory --> VfsSftpFileSystemView
 @enduml
