@@ -1,7 +1,7 @@
 # WeEFS: Extended File System Library for Java
 
 **WeEFS** is a Java NIO.2-compatible file-system library that abstracts **ZIP, TAR and GZIP archives** and **NFS mounts** as
-standard `java.nio.file.FileSystem` instances. This project was built as a mini-project for the course of **Object Oriented Design and Analysis** and is shipped with a simple UI, built using `Swing` GUI-tooklit library.
+standard `java.nio.file.FileSystem` instances. This project was built as a mini-project for the course of **Object Oriented Design and Analysis** and is shipped with a simple UI, built using `Swing` GUI-toolkit library.
 
 ---
 
