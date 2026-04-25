@@ -94,14 +94,14 @@ build: deps
 	jar cvfm bin/artifact.jar MANIFEST.MF -C bin .
 run:
 	java -jar bin/artifact.jar integration
-run-ui: build
-	java -cp "bin:lib/*" io.wfs.ui.MainLauncher
 run-gui:
 	java -jar bin/artifact.jar gui
 run-sftp-server: build
 	java -jar bin/artifact.jar sftp-server archive.zip 8888 dev dev
-test-ui: build
+test-gui: build
 	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
+test-nfs: build
+	java -jar bin/artifact.jar nfs-integration
 test-unit: build
 	java -jar bin/artifact.jar unit
 test-all: build
