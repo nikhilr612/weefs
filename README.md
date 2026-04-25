@@ -1,10 +1,7 @@
-# WeEFS — Extended File System Library for Java
+# WeEFS: Extended File System Library for Java
 
-**WeEFS** (Work/Extended/Embedded File System) is a Java NIO.2-compatible
-file-system library that exposes **ZIP/TAR archives** and **NFS mounts** as
-standard `java.nio.file.FileSystem` instances. It ships with a **Swing desktop
-GUI** for browsing, editing, and managing files inside archives and on remote
-NFS shares.
+**WeEFS** is a Java NIO.2-compatible file-system library that abstracts **ZIP, TAR and GZIP archives** and **NFS mounts** as
+standard `java.nio.file.FileSystem` instances. This project was built as a mini-project for the course of **Object Oriented Design and Analysis** and is shipped with a simple UI, built using `Swing` GUI-toolkit library.
 
 ---
 
@@ -24,26 +21,55 @@ NFS shares.
 ## Requirements
 
 - **Java 21+** (tested with OpenJDK 25)
-- [just](https://github.com/casey/just) command runner (optional — you can
-  invoke `javac`/`jar` directly)
-- `jtar-2.3.jar` (fetched automatically by `just deps`)
+- [just](https://github.com/casey/just) command runner (optional, you can
+  invoke `javac`/`jar` and fetch dependencies manually too)
+
+There are certain other dependancies, but they can all be fetched with `just deps` command which pulls all the dependancies into `lib` folder. These are:
+      
+### For archive and compression:
+| Library                                | Version | Purpose                          |
+|----------------------------------------|---------|----------------------------------|
+| jtar (org.kamranzafar)                 | 2.3     | TAR archive read/write           |
+| commons-compress (org.apache.commons)  | 1.27.1  | BZip2, LZMA compression streams  |
+| xz (org.tukaani)                       | 1.10    | XZ/LZMA2 compression streams     |
+| commons-io (org.apache.commons)        | 2.18.0  | File utility helpers             |
+
+    
+### For Remote, SSH and web server:
+| Library                          | Version | Purpose                                  |
+|----------------------------------|---------|------------------------------------------|
+| JSch (com.jcraft)                | 0.1.55  | SFTP client (NFS-over-SFTP operations)   |
+| Apache MINA sshd-core            | 2.11.0  | SFTP server,  serves archives over SSH   |
+| Apache MINA sshd-sftp            | 2.11.0  | SFTP subsystem for the archive server    |
+| Apache MINA sshd-common          | 2.17.1  | Shared MINA SSHD types                   |
+| spring-boot                                                             | 2.7.18  | Application context bootstrap    |
+| spring-core / spring-beans / spring-context / spring-expression / spring-aop / spring-jcl | 5.3.31  | IoC container, dependency injection |
+
+
+### For UI and logging:
+| Library                    | Version | Purpose                                      |
+|----------------------------|---------|----------------------------------------------|
+| FlatLaf (com.formdev)      | 3.5.4   | Modern Swing Look & Feel (light/dark theme)  |
+| slf4j-api                  | 2.0.16  | Logging facade (used by MINA sshd)           |
+| slf4j-simple               | 2.0.16  | Simple logging backend                       |
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1 — Clone and build
-git clone <repo-url> && cd weefs
-just build          # downloads jtar dependency, compiles, builds artifact.jar
+# Clone and build
+git clone https://github.com/nikhilr612/weefs && cd weefs
+just build          # downloads dependencies, compiles and builds artifact.jar
 
-# 2 — Run the GUI
-just run-gui        # or: java -jar bin/artifact.jar gui
+# Run the GUI
+just run-gui
 
-# 3 — Run integration tests
-just run            # archive integration tests
-java -jar bin/artifact.jar nfs-integration   # NFS tests
-just test-ui        # UI integration tests
+# Run integration tests
+just test-all     # runs all tests
+just run          # archive integration tests
+just test-nfs     # NFS tests
+just test-gui     # UI integration tests
 ```
 
 ---
@@ -99,110 +125,35 @@ weefs/
 │           ├── FileTypeDetector.java       # MIME detection
 │           ├── IconFactory.java            # Icon provider
 │           └── SwingUtils.java             # UI helpers
-├── lib/                 # External JARs (jtar-2.3.jar)
+├── lib/                 # External dependency JARs
 ├── bin/                 # Compiled output
-├── justfile             # Build recipes
-├── DESIGN.md            # Architecture & antipattern analysis
-├── HOW_IT_WORKS.md      # Detailed operation flows
-├── NFS_IMPLEMENTATION_DETAILS.md
-├── NFS_VERIFICATION_REPORT.md
-├── UI_GUIDE.md / UI_QUICK_START.md
-└── USAGE_DEMO_GUIDE.md
+├── justfile             # No build systems, contains shorthands for commands
 ```
 
 ---
 
 ## Architecture
 
-WeEFS is organised in three layers:
+The UI is built using MVC design pattern. It uses the ![core](src/io/wfs/core) as a library and lets user interact with different file systems uniformly. Here is a high level design of the entire project:
+![high-level-diagram](docs/rendered/high-level-good-design.png)
 
-```
- ┌──────────────────────────────────┐
- │          VIEW (Swing UI)         │  MainFrame, Tree, ContentPanel
- └────────────────┬─────────────────┘
-                  │  PropertyChangeEvents (Observer)
- ┌────────────────▼─────────────────┐
- │     MODEL  (ArchiveModel)        │  State, selection, config
- └────────────────┬─────────────────┘
-                  │  IFileOperations (Strategy)
- ┌────────────────▼─────────────────┐
- │   CONTROLLER + CORE LAYER        │  ArchiveController ─► FileSystemProvider
- └──────────────────────────────────┘
-```
 
-- **Model** — `ArchiveModel` holds the current archive/NFS state and fires
-  `PropertyChangeEvent`s. Views listen and refresh.
-- **Controller** — `ArchiveController` coordinates user actions, delegating
-  file I/O to `IFileOperations` (polymorphic: `FileOperations` for archives,
-  `NfsFileOperations` for NFS).
-- **Core** — Custom `FileSystemProvider` implementations expose archives and
-  NFS exports via the standard `java.nio.file` API.
-
-### Key Design Patterns
+### Key Design Patterns used
 
 | Pattern | Where |
 |---|---|
 | **Strategy** | `ArchiveFormat` (ZIP/TAR), `IFileOperations` (archive/NFS) |
 | **Observer** | `PropertyChangeSupport` in `ArchiveModel` |
-| **Factory** | `MenuBarFactory`, `ToolBarFactory`, `IconFactory` |
 | **Adapter** | `ExtZipFileSystem` / `NfsFileSystem` adapt archives and NFS to NIO.2 |
 | **Command** | Action lambdas wired up in menus and toolbar |
-
----
-
-## Building
-
-```bash
-just build          # full build (deps → compile → jar)
-just clean          # remove bin/
-just deps           # download jtar dependency only
-```
-
-Manual compilation:
-
-```bash
-javac -cp "lib/*" -d bin $(find src -type f -name "*.java")
-jar cvfm bin/artifact.jar MANIFEST.MF -C bin .
-```
-
----
-
-## Static Analysis
-
-Strict PMD and Checkstyle configurations are included:
-
-```bash
-# PMD (download pmd-bin-7.x and add to PATH first)
-pmd check -d src -R pmd-ruleset.xml -f text
-
-# Checkstyle (download checkstyle-10.x-all.jar first)
-java -jar checkstyle-10.*-all.jar -c checkstyle.xml src/
-```
-
----
-
-## Testing
-
-```bash
-just run              # archive integration tests
-just test-ui          # UI integration tests
-java -jar bin/artifact.jar nfs-integration    # NFS tests
-java -jar bin/artifact.jar all-integration    # all tests
-```
+| **Composite** | File system is rendered as a tree using composite pattern |
+| **Flyweight** | Child nodes and the data on the nodes themselves are lazy-loaded |
 
 ---
 
 ## Documentation
 
-| Document | Purpose |
-|---|---|
-| [DESIGN.md](DESIGN.md) | Architecture, antipattern analysis, improvement roadmap |
-| [HOW_IT_WORKS.md](HOW_IT_WORKS.md) | Detailed operation flows and class roles |
-| [NFS_IMPLEMENTATION_DETAILS.md](NFS_IMPLEMENTATION_DETAILS.md) | NFS provider internals |
-| [NFS_VERIFICATION_REPORT.md](NFS_VERIFICATION_REPORT.md) | NFS verification results |
-| [UI_GUIDE.md](UI_GUIDE.md) | Full UI documentation |
-| [UI_QUICK_START.md](UI_QUICK_START.md) | Quick-start for the GUI |
-| [USAGE_DEMO_GUIDE.md](USAGE_DEMO_GUIDE.md) | Usage demo walkthrough |
+All existing documentation can be found in ![docs](docs) folder. This folder contains various UML diagrams which explain the project architecture in detail.
 
 ---
 
