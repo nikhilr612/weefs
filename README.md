@@ -1,8 +1,7 @@
 # WeEFS: Extended File System Library for Java
 
-**WeEFS** (Work/Extended/Embedded File System) is a Java NIO.2-compatible
-file-system library that abstracts **ZIP, TAR and GZIP archives** and **NFS mounts** as
-standard `java.nio.file.FileSystem` instances. This project was built as a mini-project for the course of **Object Oriented Design and Analysis** and hence is shipped with a UI, built with `Swing`, a Java GUI-toolkit library.
+**WeEFS** is a Java NIO.2-compatible file-system library that abstracts **ZIP, TAR and GZIP archives** and **NFS mounts** as
+standard `java.nio.file.FileSystem` instances. This project was built as a mini-project for the course of **Object Oriented Design and Analysis** and is shipped with a simple UI, built using `Swing` GUI-tooklit library.
 
 ---
 
@@ -135,7 +134,7 @@ weefs/
 
 ## Architecture
 
-The core UI is built using MVC design pattern. It uses the ![core](src/io/wfs/core) as a library and lets user interact uniformly with different file systems. Here is a high level design of the entire project:
+The UI is built using MVC design pattern. It uses the ![core](src/io/wfs/core) as a library and lets user interact with different file systems uniformly. Here is a high level design of the entire project:
 ![high-level-diagram](docs/rendered/high-level-good-design.png)
 
 
@@ -154,7 +153,7 @@ The core UI is built using MVC design pattern. It uses the ![core](src/io/wfs/co
 
 ## Documentation
 
-All existing documentation can be found in ![docs](docs) folder. The folder contains various UML diagrams which explain the project architecture in detail.
+All existing documentation can be found in ![docs](docs) folder. This folder contains various UML diagrams which explain the project architecture in detail.
 
 ---
 
