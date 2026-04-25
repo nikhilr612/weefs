@@ -69,7 +69,7 @@ just run-gui
 just test-all     # runs all tests
 just run          # archive integration tests
 just test-nfs     # NFS tests
-just test-ui      # UI integration tests
+just test-gui     # UI integration tests
 ```
 
 ---
