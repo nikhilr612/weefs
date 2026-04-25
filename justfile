@@ -96,7 +96,7 @@ run:
 	java -jar bin/artifact.jar integration
 run-gui:
 	java -jar bin/artifact.jar gui
-run-sftp-server: build
+run-sftp-server:
 	java -jar bin/artifact.jar sftp-server archive.zip 8888 dev dev
 test-gui: build
 	java -cp "bin:lib/*" io.wfs.ui.UiIntegrationTest
