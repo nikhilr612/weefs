@@ -1527,7 +1527,6 @@ VfsSftpFileSystemView --> ArchiveVfsMount
 FileSystemFactory <|.. VfsFileSystemFactory
 VfsFileSystemFactory --> VfsSftpFileSystemView
 
-' --- supplemental relationships ---
 App --> ArchiveIntegrationTest
 App --> CoreExtractorTest
 App --> CoreExtractorUriTest

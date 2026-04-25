@@ -36,11 +36,4 @@ state HasSessions {
   Saving    --> Browsing  : archive reopened
 }
 
-note right of HasSessions
-  Multiple sessions may be open simultaneously.
-  Opening another archive adds a new session
-  rather than replacing the current one.
-  Archive sessions are flushed on close;
-  directory and remote mounts are write-through.
-end note
 @enduml

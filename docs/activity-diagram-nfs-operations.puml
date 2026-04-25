@@ -17,12 +17,6 @@ endif
 
 :Resolve file operations strategy
 for the active session;
-note right
-  Remote and local sessions each have
-  their own strategy implementation.
-  The controller depends only on the
-  shared interface (Dependency Inversion).
-end note
 
 if (operation?) then (extract)
   :Copy file(s) to chosen local destination;

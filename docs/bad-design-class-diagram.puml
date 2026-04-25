@@ -1256,7 +1256,6 @@ ArchiveModel --> FileSystemFactory
 ArchiveModel --> NfsConnectionConfig
 ArchiveModel --> FileNode
 
-' --- supplemental relationships ---
 App --> ArchiveIntegrationTest
 App --> CoreExtractorTest
 App --> CoreExtractorUriTest

@@ -5,9 +5,6 @@ skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-' =====================================================
-' External JDK & 3rd-party boundary
-' =====================================================
 package "java.nio.file (JDK)" <<External>> {
   abstract class FileSystem
   abstract class FileSystemProvider
@@ -33,9 +30,6 @@ package "io.wfs.core.filesystem (bridge)" <<External>> {
   class FsEnvKeys
 }
 
-' =====================================================
-' Core NFS types
-' =====================================================
 package "io.wfs.core.nfs" {
   interface IRemoteFileSystem {
     +sftpConfig() : NfsSftpConfig
@@ -315,9 +309,6 @@ package "io.wfs.core.nfs" {
   SftpArchiveServer +-- SASArgs
 }
 
-' =====================================================
-' Inheritance / implementation
-' =====================================================
 NfsFileSystem --|> FileSystem
 NfsFileSystem ..|> IRemoteFileSystem
 NfsSftpFsProvider --|> FileSystemProvider
@@ -329,9 +320,6 @@ NfsPathIterator ..|> JdkIterator
 NfsBasicFileAttributes ..|> BasicFileAttributes
 NfsSyncingByteChannel ..|> SeekableByteChannel
 
-' =====================================================
-' Compositions / associations
-' =====================================================
 NfsFileSystem --> "1" NfsSftpFsProvider : sftpProvider
 NfsFileSystem --> "1" NfsSftpConfig : config
 NfsFileSystem --> "0..1" NfsConnectionConfig : legacyConfig
@@ -362,7 +350,6 @@ SftpArchiveServer ..> SshServer
 SftpArchiveServer ..> PasswordAuthenticator
 SftpArchiveServer ..> NfsSftpFsProvider
 
-' --- supplemental relationships ---
 NfsFileSystem --> NfsIO
 NfsFileSystem --> NfsFsProvider
 NfsFsProvider --> NfsIO
@@ -378,7 +365,6 @@ NfsSftpFsIO --> RemoteFileStat
 NfsSftpFsProvider --> NfsSftpConfig
 NfsSftpFsProvider --> NfsParsedUri
 
-' --- supplemental relationships ---
 FileSystem <|-- NfsFileSystem
 IRemoteFileSystem <|.. NfsFileSystem
 FileSystemProvider <|-- NfsFsProvider

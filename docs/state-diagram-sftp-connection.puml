@@ -34,12 +34,4 @@ state Mounted {
   }
 }
 
-note right of Mounted
-  No persistent TCP connection is maintained.
-  Each file operation (list, stat, read, write,
-  delete, rename) opens a fresh SSH/SFTP session
-  per call and disconnects in a finally block.
-  I/O failures throw IOException to the caller;
-  the filesystem remains Mounted.
-end note
 @enduml

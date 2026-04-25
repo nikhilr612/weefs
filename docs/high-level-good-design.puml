@@ -6,20 +6,12 @@ skinparam linetype ortho
 skinparam packageStyle rectangle
 hide empty members
 
-' =====================================================================
-' UI layer — MVC restored, multi-session, interface-driven
-' =====================================================================
-package "UI (clean MVC, multi-session)" #E8F5E9 {
+package "UI (clean MVC, multi-session)" {
 
   class MainFrame <<GOOD: depends on interface>> {
     -controller : IArchiveController
     -model : ArchiveModel
   }
-  note right of MainFrame
-    View depends on IArchiveController,
-    not the concrete controller class.
-    Was: held concrete ArchiveController.
-  end note
 
   class ArchiveModel <<GOOD: session registry>> <<Observable>> {
     -sessions : List<MountSession>
@@ -34,12 +26,6 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
     +closeSession(String) : void
     +setNfsConfig(NfsConnectionConfig) : void
   }
-  note right of ArchiveModel
-    No longer owns per-mount state.
-    Holds a list of MountSession instances
-    and delegates state to each.
-    Was: single archive + NFS god object.
-  end note
 
   class MountSession <<GOOD: Value Object>> <<Extract Class>> {
     -id : String
@@ -51,12 +37,6 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
     +isSaveable() : boolean
     +close() : void
   }
-  note bottom of MountSession
-    All per-mount state (FS, path,
-    read-only, remote flag, NFS config)
-    now lives here.
-    Enables multiple concurrent mounts.
-  end note
 
   class RemoteMountManager <<GOOD: Extract Class>> {
     -nfsConfig : NfsConnectionConfig
@@ -69,12 +49,6 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
     +cut : boolean
     +sourceSessionId : String
   }
-  note bottom of ClipboardEntry
-    New abstraction enabling copy/cut/paste
-    across sessions (sourceSessionId routes
-    reads to the correct backend).
-    Was: no clipboard at all.
-  end note
 
   interface IArchiveController <<GOOD: ISP>>
   interface INfsController    <<GOOD: ISP>>
@@ -104,13 +78,6 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
   class NfsFileOperations
   IFileOperations <|.. FileOperations
   IFileOperations <|.. NfsFileOperations
-  note top of IFileOperations
-    Seam introduced so the controller
-    can be unit-tested and can swap
-    between local and NFS backends.
-    Was: concrete FileOperations /
-    NfsFileOperations returned directly.
-  end note
 
   ArchiveModel "1" o-- "*" MountSession
   ArchiveModel --> RemoteMountManager
@@ -119,7 +86,6 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
   ArchiveController --> ClipboardEntry
   MainFrame --> IArchiveController
 
-  ' --- supporting base classes (unchanged across transition) ---
   class FileNode <<base: tree node>> {
     -name : String
     -path : Path
@@ -170,8 +136,7 @@ package "UI (clean MVC, multi-session)" #E8F5E9 {
   ClipboardEntry --> FileNode
   NfsConnectionDialog ..> NfsConnectionConfig
 }
-' =====================================================================
-package "Filesystem SPI (OCP + DIP)" #E8F5E9 {
+package "Filesystem SPI (OCP + DIP)" {
 
   interface FileSystemDriver <<GOOD: SPI>> {
     +scheme() : String
@@ -191,16 +156,6 @@ package "Filesystem SPI (OCP + DIP)" #E8F5E9 {
     -provider : NfsSftpFsProvider
     +NfsFileSystemDriver(NfsSftpFsProvider)
   }
-  note top of FileSystemFactory
-    register(driver) makes the factory
-    Open/Closed — new schemes plug in
-    without modifying the factory.
-    Was: hard-coded registerDefaults().
-  end note
-  note bottom of NfsFileSystemDriver
-    Provider is constructor-injected (DIP).
-    Was: new'd internally.
-  end note
 
   FileSystemDriver <|.. LocalFileSystemDriver
   FileSystemDriver <|.. ZipFileSystemDriver
@@ -208,17 +163,13 @@ package "Filesystem SPI (OCP + DIP)" #E8F5E9 {
   FileSystemFactory o--> FileSystemDriver
   ArchiveModel --> FileSystemFactory
 
-  ' --- supporting base classes ---
   class ExtZipFileSystem <<base: weefs FS>>
   class ExtZipFsProvider <<base: weefs FS>>
   ZipFileSystemDriver --> ExtZipFsProvider
   ExtZipFsProvider --> ExtZipFileSystem
 }
 
-' =====================================================================
-' Archive format — Strategy + Registry
-' =====================================================================
-package "Archive format (Strategy + Registry)" #E8F5E9 {
+package "Archive format (Strategy + Registry)" {
 
   interface ArchiveFormat <<GOOD: Strategy>> {
     +supports(Path) : boolean
@@ -241,17 +192,9 @@ package "Archive format (Strategy + Registry)" #E8F5E9 {
   ArchiveFormatDetector --> ArchiveFormatInfo
   ArchiveFormatDetector --> ArchiveContainerType
 
-  note bottom of ArchiveFormats
-    Replaces the monolithic Extractor.
-    Each format is its own Strategy;
-    ArchiveFormats is a Registry of them.
-  end note
 }
 
-' =====================================================================
-' Compression — Strategy + Factory
-' =====================================================================
-package "Compression (Strategy + Factory)" #E8F5E9 {
+package "Compression (Strategy + Factory)" {
 
   interface ICompressionStrategy <<GOOD: Strategy>> {
     +wrapInput(InputStream) : InputStream
@@ -271,17 +214,9 @@ package "Compression (Strategy + Factory)" #E8F5E9 {
   ICompressionStrategy <|.. LzmaCompressionStrategy
   CompressionStrategyFactory --> ICompressionStrategy
 
-  note bottom of CompressionStrategyFactory
-    Replaces inline "if (isGzip) ..." code.
-    Each codec is a separate Strategy;
-    the Factory picks one by magic header.
-  end note
 }
 
-' =====================================================================
-' NFS — transport isolated behind interface
-' =====================================================================
-package "NFS (isolated transport)" #E8F5E9 {
+package "NFS (isolated transport)" {
 
   interface IRemoteFileSystem <<GOOD: DIP>>
   class NfsFileSystem
@@ -292,16 +227,8 @@ package "NFS (isolated transport)" #E8F5E9 {
   NfsSftpFsProvider --> NfsFileSystem
   NfsSftpFsProvider ..> NfsSftpFsIO
 
-  note bottom of IRemoteFileSystem
-    Remote FS now implements a
-    capability interface; callers
-    depend on the interface, not JSch.
-  end note
 }
 
-' =====================================================================
-' Cross-package wiring
-' =====================================================================
 FileOperations ..> ArchiveFormats : <<extract/write>>
 ArchiveFormats ..> ICompressionStrategy : <<Tar wraps via>>
 ExtZipFileSystem ..> ICompressionStrategy : <<Zip entry wraps via>>
@@ -309,23 +236,4 @@ ExtZipFileSystem ..> ArchiveFormats
 NfsFileSystem --> NfsFileSystemDriver : <<produced by>>
 ExtZipFsProvider --> ZipFileSystemDriver : <<produced by>>
 
-' =====================================================================
-' Transition summary
-' =====================================================================
-legend right
-  == Bad design  →  Good design ==
-  God ArchiveModel            → ArchiveModel + MountSession + RemoteMountManager
-  Single archive              → sessions : List<MountSession>, activeSession
-  Duplicate currentNfsConfig  → single source of truth in MountSession
-  Fat ArchiveController       → ArchiveController impl IArchiveController + INfsController (ISP)
-  Concrete NfsFileOperations  → IFileOperations seam (DIP)
-  View → concrete controller  → MainFrame → IArchiveController
-  No clipboard                → ClipboardEntry record (cross-session copy/cut/paste)
-  Hardcoded FileSystemFactory → FileSystemFactory.register(driver) + FileSystemDriver SPI (OCP)
-  new'd providers in drivers  → constructor-injected providers (DIP)
-  Monolithic Extractor        → ArchiveFormat Strategy + ArchiveFormats Registry + ArchiveFormatDetector
-  Inline gzip/xz wrapping     → ICompressionStrategy + CompressionStrategyFactory
-  JSch leaked to callers      → IRemoteFileSystem interface, NfsSftpFsIO hidden as utility
-  No theming / deprecated UI  → FlatLaf L&F + theme-aware renderers
-endlegend
 @enduml

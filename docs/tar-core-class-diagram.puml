@@ -5,9 +5,6 @@ skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-' =====================================================
-' External boundaries
-' =====================================================
 package "java.nio.file (JDK)" <<External>> {
   abstract class FileSystem
   abstract class FileSystemProvider
@@ -39,9 +36,6 @@ package "io.wfs.core.filesystem (bridge)" <<External>> {
   class FsEnvKeys
 }
 
-' =====================================================
-' Archive format strategy
-' =====================================================
 package "io.wfs.core.extractor (formats)" {
   interface ArchiveFormat <<Strategy>> {
     +supports(archiveFile : Path) : boolean
@@ -95,9 +89,6 @@ package "io.wfs.core.extractor (formats)" {
   ArchiveFormatInfo --> ArchiveContainerType
 }
 
-' =====================================================
-' weefs:// virtual FileSystem (ExtZip*)
-' =====================================================
 package "io.wfs.core.extractor (fs provider)" {
   class ExtZipFileSystem {
     -provider : ExtZipFsProvider
@@ -220,9 +211,6 @@ package "io.wfs.core.extractor (fs provider)" {
   }
 }
 
-' =====================================================
-' Inheritance / implementation
-' =====================================================
 ExtZipFileSystem --|> FileSystem
 ExtZipFsProvider --|> FileSystemProvider
 ExtZipPath ..|> Path
@@ -230,9 +218,6 @@ ExtZipDirectoryStream ..|> DirectoryStream
 ExtZipDirectoryIterator ..|> JdkIterator
 ExtZipPathIterator ..|> JdkIterator
 
-' =====================================================
-' Compositions / dependencies
-' =====================================================
 ExtZipFileSystem --> "1" ExtZipFsProvider
 ExtZipFileSystem *--> "1" Path : archivePath
 ExtZipFileSystem *--> "1" Path : tempRoot
@@ -248,7 +233,6 @@ ExtZipDirectoryIterator --> ExtZipFileSystem
 ExtZipDirectoryIterator --> JdkIterator : delegate
 ExtZipPathIterator --> ExtZipFileSystem
 
-' Format resolution
 ArchiveFormats ..> ArchiveFormatDetector
 ArchiveFormats ..> ArchiveFormat
 ExtZipFileSystem ..> ArchiveFormats
@@ -267,17 +251,8 @@ TarArchiveFormat ..> ExtZipFsIO
 ZipArchiveFormat ..> ExtZipFsIO
 ExtZipParsedUri ..> ExtZipFsProvider : <<used by>>
 
-note bottom of ArchiveFormat
-  Strategy: resolve() picks the right
-  format; each delegates actual byte
-  work to ExtZipFsIO + compression
-  strategies.
-end note
-
-' --- supplemental relationships ---
 ArchiveFormatDetector --> ArchiveContainerType
 
-' --- supplemental relationships ---
 FileSystem <|-- ExtZipFileSystem
 FileSystemProvider <|-- ExtZipFsProvider
 Path <|.. ExtZipPath

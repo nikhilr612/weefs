@@ -5,9 +5,6 @@ skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
-' =====================================================
-' External boundaries
-' =====================================================
 package "java.io / java.util.zip (JDK)" <<External>> {
   abstract class InputStream
   abstract class OutputStream
@@ -33,9 +30,6 @@ package "io.wfs.core.extractor (bridge)" <<External>> {
   class TarArchiveFormat
 }
 
-' =====================================================
-' Strategy interface + implementations
-' =====================================================
 package "io.wfs.core.extractor.compression" {
   interface ICompressionStrategy <<Strategy>> {
     +wrapInput(input : InputStream) : InputStream
@@ -86,9 +80,6 @@ package "io.wfs.core.extractor.compression" {
   CompressionStrategyFactory ..> LzmaCompressionStrategy
 }
 
-' =====================================================
-' Dependencies on external libraries
-' =====================================================
 GzipCompressionStrategy ..> GZIPInputStream
 GzipCompressionStrategy ..> GZIPOutputStream
 Bzip2CompressionStrategy ..> BZip2CompressorInputStream
@@ -99,16 +90,9 @@ XzCompressionStrategy ..> LZMA2Options
 LzmaCompressionStrategy ..> LZMACompressorInputStream
 LzmaCompressionStrategy ..> LZMACompressorOutputStream
 
-' Callers
 ExtZipFsIO ..> CompressionStrategyFactory : <<uses>>
 ExtZipFsIO ..> ICompressionStrategy
 TarArchiveFormat ..> CompressionStrategyFactory
 TarArchiveFormat ..> ICompressionStrategy
 
-note right of ICompressionStrategy
-  Classic **Strategy** pattern — each
-  algorithm wraps streams uniformly
-  so Tar extraction/writing is format
-  agnostic.
-end note
 @enduml
