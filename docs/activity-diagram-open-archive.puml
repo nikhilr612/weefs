@@ -15,3 +15,26 @@ else (URI string)
 endif
 
 :Resolve filesystem driver by URI scheme;
+
+if (scheme?) then (xzip)
+  :Extract archive to cache directory;
+  :Select archive-backed virtual FileSystem;
+else if (weefs) then (yes)
+  if (auth env var set?) then (yes)
+    :Verify remote root is reachable;
+    :Select remote-backed FileSystem;
+  else (no)
+    :Report error; auth env var not set;
+    stop
+  endif
+else (file)
+  :Select default local FileSystem;
+endif
+
+:Wrap in new mount session
+(display path, read-only flag, remote flag);
+:Add session to model;
+:Notify views, tree adds new session root node;
+
+stop
+@enduml
