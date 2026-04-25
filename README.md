@@ -125,7 +125,7 @@ weefs/
 │           ├── FileTypeDetector.java       # MIME detection
 │           ├── IconFactory.java            # Icon provider
 │           └── SwingUtils.java             # UI helpers
-├── lib/                 # External dependancy JARs
+├── lib/                 # External dependency JARs
 ├── bin/                 # Compiled output
 ├── justfile             # No build systems, contains shorthands for commands
 ```
