@@ -2,7 +2,6 @@
 title weefs — High-level Good Design (patterns introduced to fix the bad design)
 
 skinparam classAttributeIconSize 0
-skinparam linetype ortho
 skinparam packageStyle rectangle
 hide empty members
 
